@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-workspace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter
+spec:
+  type: NodePort
+  selector:
+    app: jupyter
+  ports:
+    - port: 8888
+      targetPort: 8888
+      nodePort: 30088
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyter
+  template:
+    metadata:
+      labels:
+        app: jupyter
+    spec:
+      initContainers:
+        - name: seed-shared-workspace
+          image: harbor.local/data-platform/k8s-data-platform-jupyter:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /workspace-volume/shared
+              if [ -z "$(find /workspace-volume/shared -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)" ] && [ -d "${JUPYTER_BOOTSTRAP_DIR}" ]; then
+                cp -a "${JUPYTER_BOOTSTRAP_DIR}"/. /workspace-volume/shared/ 2>/dev/null || true
+              fi
+          env:
+            - name: JUPYTER_BOOTSTRAP_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_JUPYTER_BOOTSTRAP_DIR
+          volumeMounts:
+            - name: jupyter-workspace
+              mountPath: /workspace-volume
+      containers:
+        - name: jupyter
+          image: harbor.local/data-platform/k8s-data-platform-jupyter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8888
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: JUPYTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: JUPYTER_TOKEN
+            - name: PLATFORM_MONGO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_MONGO_URL
+            - name: PLATFORM_REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_REDIS_URL
+            - name: JUPYTER_ROOT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_JUPYTER_WORKSPACE_ROOT
+            - name: JUPYTER_BOOTSTRAP_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: platform-config
+                  key: PLATFORM_JUPYTER_BOOTSTRAP_DIR
+          volumeMounts:
+            - name: jupyter-workspace
+              mountPath: /workspace/user-home
+              subPath: shared
+      volumes:
+        - name: jupyter-workspace
+          persistentVolumeClaim:
+            claimName: jupyter-workspace

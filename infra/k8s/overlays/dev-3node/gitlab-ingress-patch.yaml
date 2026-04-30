@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab
+spec:
+  template:
+    spec:
+      containers:
+        - name: gitlab
+          env:
+            - name: GITLAB_OMNIBUS_CONFIG
+              value: |
+                external_url 'http://gitlab.platform.local'
+                gitlab_rails['gitlab_shell_ssh_port'] = 30224
+                gitlab_rails['initial_root_password'] = ENV['GITLAB_ROOT_PASSWORD']

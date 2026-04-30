@@ -1,0 +1,17 @@
+dist/
+.tmp-k8s-images/
+packer/output-*/
+apps/frontend/node_modules/
+apps/frontend/dist/
+apps/backend/.venv/
+apps/jupyter/.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+*.log
+infra/k8s/runner/secret.local.yaml
+.venv*
+*.iso
+packer/packer_cache/
+*.ova
+tmp/pwcap/node_modules/

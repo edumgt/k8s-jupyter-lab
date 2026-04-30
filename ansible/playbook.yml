@@ -1,0 +1,11 @@
+- hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - base
+    - security
+    - toolchains
+    - container_runtime
+    - kubernetes
+    - platform_bootstrap

@@ -1,0 +1,257 @@
+- name: Disable swap immediately
+  command: swapoff -a
+  when: ansible_swaptotal_mb | int > 0
+  changed_when: ansible_swaptotal_mb | int > 0
+
+- name: Disable swap in fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s+.*)$'
+    replace: '# \1'
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Persist Kubernetes kernel modules
+  copy:
+    dest: /etc/modules-load.d/kubernetes.conf
+    mode: '0644'
+    content: |
+      overlay
+      br_netfilter
+
+- name: Persist Kubernetes sysctl settings
+  copy:
+    dest: /etc/sysctl.d/99-kubernetes-cri.conf
+    mode: '0644'
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+- name: Apply sysctl settings
+  command: sysctl --system
+  changed_when: false
+
+- name: Ensure systemd-resolved drop-in directory exists
+  file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Configure node DNS resolver defaults
+  copy:
+    dest: /etc/systemd/resolved.conf.d/99-k8s-data-platform.conf
+    mode: '0644'
+    content: |
+      [Resolve]
+      DNS={{ kubernetes_node_dns_servers | join(' ') }}
+      FallbackDNS=1.1.1.1 8.8.8.8
+  register: node_resolver_config
+
+- name: Install containerd package
+  apt:
+    name:
+      - containerd
+    state: present
+    update_cache: true
+
+- name: Ensure containerd config directory exists
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+
+- name: Generate default containerd configuration
+  shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  register: containerd_config_created
+
+- name: Enable CRI plugin in containerd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'disabled_plugins\s*=\s*\["cri"\]'
+    replace: 'disabled_plugins = []'
+  register: containerd_cri_config
+
+- name: Use systemd cgroups in containerd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  register: containerd_cgroup_config
+
+- name: Ensure containerd service started
+  service:
+    name: containerd
+    enabled: true
+    state: started
+
+- name: Restart containerd to apply configuration
+  service:
+    name: containerd
+    state: restarted
+  when: containerd_config_created.changed or containerd_cri_config.changed or containerd_cgroup_config.changed
+
+- name: Ensure apt keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Kubernetes release key
+  get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_minor_version }}/deb/Release.key"
+    dest: /tmp/kubernetes-release.key
+    mode: '0644'
+
+- name: Dearmor Kubernetes release key
+  command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Configure Kubernetes apt repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubernetes_apt_minor_version }}/deb/ /"
+    filename: kubernetes
+    state: present
+
+- name: Install Kubernetes packages
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Configure kubelet to use non-stub resolv.conf
+  lineinfile:
+    path: /etc/default/kubelet
+    regexp: '^KUBELET_EXTRA_ARGS='
+    line: 'KUBELET_EXTRA_ARGS="--resolv-conf={{ kubernetes_kubelet_resolv_conf }}"'
+    create: true
+    mode: '0644'
+  register: kubelet_resolv_args
+
+- name: Restart systemd-resolved when DNS config changed
+  service:
+    name: systemd-resolved
+    state: restarted
+  when: node_resolver_config.changed
+
+- name: Ensure kubelet service started
+  service:
+    name: kubelet
+    enabled: true
+    state: started
+
+- name: Restart kubelet when resolv.conf args changed
+  service:
+    name: kubelet
+    state: restarted
+  when: kubelet_resolv_args.changed
+
+- name: Initialize Kubernetes control plane
+  command:
+    argv:
+      - kubeadm
+      - init
+      - --cri-socket=unix:///run/containerd/containerd.sock
+      - --pod-network-cidr={{ kubernetes_pod_network_cidr }}
+      - --skip-token-print
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Ensure ubuntu kube directory exists
+  file:
+    path: "/home/{{ kubernetes_admin_user }}/.kube"
+    state: directory
+    owner: "{{ kubernetes_admin_user }}"
+    group: "{{ kubernetes_admin_user }}"
+    mode: '0700'
+
+- name: Copy kubeconfig for ubuntu user
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ kubernetes_admin_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ kubernetes_admin_user }}"
+    group: "{{ kubernetes_admin_user }}"
+    mode: '0600'
+
+- name: Check bundled CNI manifest in repo
+  stat:
+    path: "{{ playbook_dir }}/../offline/manifests/{{ kubernetes_cni_manifest_filename }}"
+  register: kubernetes_cni_manifest_local
+  delegate_to: localhost
+  become: false
+
+- name: Copy bundled CNI manifest
+  copy:
+    src: "{{ playbook_dir }}/../offline/manifests/{{ kubernetes_cni_manifest_filename }}"
+    dest: "{{ kubernetes_cni_manifest_tmp_path }}"
+    mode: '0644'
+  when: kubernetes_cni_manifest_local.stat.exists
+
+- name: Download CNI manifest
+  get_url:
+    url: "{{ kubernetes_cni_manifest_url }}"
+    dest: "{{ kubernetes_cni_manifest_tmp_path }}"
+    mode: '0644'
+  when: not kubernetes_cni_manifest_local.stat.exists
+
+- name: Apply CNI manifest
+  command:
+    argv:
+      - kubectl
+      - apply
+      - -f
+      - "{{ kubernetes_cni_manifest_tmp_path }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: cni_apply
+  changed_when: "'created' in cni_apply.stdout or 'configured' in cni_apply.stdout"
+
+- name: Allow workloads on the single control-plane node
+  command:
+    argv:
+      - kubectl
+      - taint
+      - nodes
+      - --all
+      - node-role.kubernetes.io/control-plane-
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: control_plane_taint
+  changed_when: "'untainted' in control_plane_taint.stdout"
+  failed_when: false
+
+- name: Remove legacy master taint if present
+  command:
+    argv:
+      - kubectl
+      - taint
+      - nodes
+      - --all
+      - node-role.kubernetes.io/master-
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: master_taint
+  changed_when: "'untainted' in master_taint.stdout"
+  failed_when: false

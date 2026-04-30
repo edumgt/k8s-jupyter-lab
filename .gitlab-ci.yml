@@ -1,0 +1,55 @@
+stages:
+  - validate
+  - deploy
+
+variables:
+  DEPLOY_ENV: "prod"
+  DEPLOY_NAMESPACE: "data-platform-prod"
+  APPLY_RUNNER: "false"
+  SUPPORT_IMAGE_PREFIX: "harbor.local/data-platform"
+
+python_sanity:
+  stage: validate
+  image: ${SUPPORT_IMAGE_PREFIX}/platform-python:3.12
+  script:
+    - python -m compileall apps/backend/app apps/airflow/dags
+
+shell_sanity:
+  stage: validate
+  image: ${SUPPORT_IMAGE_PREFIX}/platform-bash:5.2
+  script:
+    - bash -n scripts/apply_k8s.sh
+    - bash -n scripts/reset_k8s.sh
+    - bash -n scripts/status_k8s.sh
+    - bash -n scripts/healthcheck.sh
+    - bash -n scripts/verify.sh
+    - bash -n scripts/export_gitlab_repos.sh
+
+kustomize_validate:
+  stage: validate
+  image: ${SUPPORT_IMAGE_PREFIX}/platform-kubectl:latest
+  script:
+    - kubectl kustomize infra/k8s/base >/dev/null
+    - kubectl kustomize infra/k8s/overlays/dev >/dev/null
+    - kubectl kustomize infra/k8s/overlays/prod >/dev/null
+    - kubectl kustomize infra/k8s/runner/base >/dev/null
+    - kubectl kustomize infra/k8s/runner/overlays/dev >/dev/null
+    - kubectl kustomize infra/k8s/runner/overlays/prod >/dev/null
+
+deploy_platform_overlay:
+  stage: deploy
+  image: ${SUPPORT_IMAGE_PREFIX}/platform-kubectl:latest
+  needs:
+    - python_sanity
+    - shell_sanity
+    - kustomize_validate
+  script:
+    - echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG="$CI_PROJECT_DIR/kubeconfig"
+    - export DEPLOY_NAMESPACE="${DEPLOY_NAMESPACE:-data-platform-${DEPLOY_ENV}}"
+    - kubectl apply -k "infra/k8s/overlays/${DEPLOY_ENV}"
+    - |
+      if [ "${APPLY_RUNNER}" = "true" ]; then
+        kubectl apply -k "infra/k8s/runner/overlays/${DEPLOY_ENV}"
+      fi
+    - kubectl get pods -n "$DEPLOY_NAMESPACE"

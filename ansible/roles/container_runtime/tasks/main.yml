@@ -1,0 +1,18 @@
+- name: Install Docker engine packages
+  apt:
+    name:
+      - docker.io
+    state: present
+    update_cache: true
+
+- name: Ensure Docker service started
+  service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add ubuntu user to docker group
+  user:
+    name: ubuntu
+    groups: docker
+    append: true

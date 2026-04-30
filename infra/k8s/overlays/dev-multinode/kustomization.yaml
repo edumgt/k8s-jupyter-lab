@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: data-platform-dev
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - local-pv.yaml
+  - platform-ingress.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/environment: dev
+      app.kubernetes.io/topology: multi-node
+
+patches:
+  - path: platform-configmap-patch.yaml
+  - path: platform-secrets-patch.yaml
+  - path: backend-clusterrolebinding-patch.yaml
+  - path: airflow-clusterrolebinding-patch.yaml
+  - path: mongodb-patch.yaml
+  - path: node-placement-patch.yaml
+  - path: gitlab-ingress-patch.yaml

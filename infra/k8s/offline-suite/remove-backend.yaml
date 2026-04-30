@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+$patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+$patch: delete
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+$patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-jupyter-session-manager
+$patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-jupyter-session-manager
+$patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backend-control-plane-reader
+$patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backend-control-plane-reader
+$patch: delete

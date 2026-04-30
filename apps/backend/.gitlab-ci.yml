@@ -1,0 +1,112 @@
+stages:
+  - build
+  - deploy
+  - verify
+
+variables:
+  HARBOR_REGISTRY: "harbor.local"
+  HARBOR_PROJECT: "data-platform"
+  IMAGE_NAME: "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/k8s-data-platform-backend"
+  NEXUS_PYPI_INDEX_URL: "http://192.168.56.10:30091/repository/pypi-all/simple"
+  NEXUS_PYPI_TRUSTED_HOST: "192.168.56.10"
+  DEPLOY_NAMESPACE: "data-platform-dev"
+  CONTROL_PLANE_IP: "192.168.56.10"
+  TARGET_NODES: "192.168.56.10 192.168.56.11 192.168.56.12"
+  SSH_USER: "ubuntu"
+  SSH_PASSWORD: "ubuntu"
+  INGRESS_LB_IP: "192.168.56.240"
+
+default:
+  image: harbor.local/data-platform/platform-ci-tools:docker28.2.2
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+        DEPLOY_ENV: "dev"
+        APP_ENV: "dev"
+        BACKEND_HOST: "platform.local"
+        API_HOST: "dev-api.platform.local"
+        FRONTEND_ORIGIN: "http://platform.local"
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        DEPLOY_ENV: "dev"
+        APP_ENV: "dev"
+        BACKEND_HOST: "platform.local"
+        API_HOST: "dev-api.platform.local"
+        FRONTEND_ORIGIN: "http://platform.local"
+    - if: '$CI_COMMIT_BRANCH == "prod"'
+      variables:
+        DEPLOY_ENV: "prod"
+        APP_ENV: "prod"
+        BACKEND_HOST: "api.platform.local"
+        API_HOST: "api.platform.local"
+        FRONTEND_ORIGIN: "http://www.platform.local"
+    - when: never
+
+build_backend_image:
+  stage: build
+  tags:
+    - control-plane-shell
+  script:
+    - set -euo pipefail
+    - test -n "${NEXUS_PYPI_INDEX_URL:-}" || (echo "NEXUS_PYPI_INDEX_URL is required" && exit 1)
+    - echo "${NEXUS_PYPI_INDEX_URL}" | grep -Eq 'nexus\.platform\.local|127\.0\.0\.1:30091|192\.168\.56\.(10|240):30091' || (echo "NEXUS_PYPI_INDEX_URL must point to local Nexus" && exit 1)
+    - DOCKER_BUILDKIT=0 docker build --build-arg "APP_ENV=${APP_ENV}" --build-arg "PIP_INDEX_URL=${NEXUS_PYPI_INDEX_URL}" --build-arg "PIP_TRUSTED_HOST=${NEXUS_PYPI_TRUSTED_HOST}" -t "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -t "${IMAGE_NAME}:latest" .
+    - TAR_PATH="/tmp/backend-${CI_PIPELINE_ID}-${CI_JOB_ID}.tar"
+    - TAR_NAME="$(basename "${TAR_PATH}")"
+    - docker save "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" -o "${TAR_PATH}"
+    - |
+      for node in ${TARGET_NODES}; do
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' rm -f /tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TAR_PATH}" "${SSH_USER}@${node}:/tmp/${TAR_NAME}"
+        sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${node}" \
+          "printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' ctr -n k8s.io images import /tmp/${TAR_NAME} && rm -f /tmp/${TAR_NAME}"
+      done
+    - rm -f "${TAR_PATH}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod" || $CI_COMMIT_BRANCH == "main"'
+
+deploy_backend:
+  stage: deploy
+  tags:
+    - control-plane-shell
+  needs:
+    - build_backend_image
+  script:
+    - set -euo pipefail
+    - |
+      sshpass -p "${SSH_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SSH_USER}@${CONTROL_PLANE_IP}" "
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' set image deployment/backend backend='${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}'
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/nodeSelector\"}]' || true
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/volumes/0\"}]' || true
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' patch deployment/backend --type='json' -p='[{\"op\":\"remove\",\"path\":\"/spec/template/spec/containers/0/volumeMounts/0\"}]' || true
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' rollout status deployment/backend --timeout=240s
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get deploy backend -o wide
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get endpoints backend -o wide
+        printf '%s\n' '${SSH_PASSWORD}' | sudo -S -p '' KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n '${DEPLOY_NAMESPACE}' get pods -l app=backend -o wide
+      "
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod" || $CI_COMMIT_BRANCH == "main"'
+
+verify_backend_route:
+  stage: verify
+  tags:
+    - control-plane-shell
+  needs:
+    - deploy_backend
+  script:
+    - set -euo pipefail
+    - 'curl -fsS -I -H "Host: ${BACKEND_HOST}" "http://${INGRESS_LB_IP}/docs"'
+    - |
+      PRE_FLIGHT_RESPONSE="$(curl -fsS -i -X OPTIONS \
+        -H "Host: ${API_HOST}" \
+        -H "Origin: ${FRONTEND_ORIGIN}" \
+        -H "Access-Control-Request-Method: POST" \
+        -H "Access-Control-Request-Headers: content-type" \
+        "http://${INGRESS_LB_IP}/api/auth/login")"
+      printf "%s\n" "${PRE_FLIGHT_RESPONSE}" | grep -Eiq '^access-control-allow-origin:'
+      printf "%s\n" "${PRE_FLIGHT_RESPONSE}" | grep -Eiq '^access-control-allow-methods:'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "prod" || $CI_COMMIT_BRANCH == "main"'

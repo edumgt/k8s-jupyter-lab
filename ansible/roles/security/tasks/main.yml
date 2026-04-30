@@ -1,0 +1,165 @@
+- name: Install security packages
+  apt:
+    name:
+      - fail2ban
+      - ufw
+    state: present
+
+- name: Default deny incoming
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Allow SSH
+  community.general.ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Allow Kubernetes API
+  community.general.ufw:
+    rule: allow
+    port: '6443'
+    proto: tcp
+
+- name: Allow kubelet secure API
+  community.general.ufw:
+    rule: allow
+    port: '10250'
+    proto: tcp
+
+- name: Allow kube-proxy healthz
+  community.general.ufw:
+    rule: allow
+    port: '10256'
+    proto: tcp
+
+- name: Allow HTTP for ingress
+  community.general.ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+
+- name: Allow HTTPS for ingress
+  community.general.ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+
+- name: Allow Calico VXLAN
+  community.general.ufw:
+    rule: allow
+    port: '4789'
+    proto: udp
+
+- name: Set UFW default forward policy to ACCEPT for CNI traffic
+  replace:
+    path: /etc/default/ufw
+    regexp: '^DEFAULT_FORWARD_POLICY=.*$'
+    replace: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+  register: ufw_forward_policy
+
+- name: Allow MetalLB memberlist TCP
+  community.general.ufw:
+    rule: allow
+    port: '7946'
+    proto: tcp
+
+- name: Allow MetalLB memberlist UDP
+  community.general.ufw:
+    rule: allow
+    port: '7946'
+    proto: udp
+
+- name: Allow frontend NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30080'
+    proto: tcp
+
+- name: Allow backend NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30081'
+    proto: tcp
+
+- name: Allow Jupyter NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30088'
+    proto: tcp
+
+- name: Allow GitLab Web NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30089'
+    proto: tcp
+
+- name: Allow Airflow NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30090'
+    proto: tcp
+
+- name: Allow Nexus NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30091'
+    proto: tcp
+
+- name: Allow Harbor NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30092'
+    proto: tcp
+
+- name: Allow code-server NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30100'
+    proto: tcp
+
+- name: Allow frontend Vite dev NodePort
+  community.general.ufw:
+    rule: allow
+    port: '31080'
+    proto: tcp
+
+- name: Allow GitLab SSH NodePort
+  community.general.ufw:
+    rule: allow
+    port: '30224'
+    proto: tcp
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Reload UFW when forward policy changed
+  command: ufw reload
+  when: ufw_forward_policy.changed
+
+- name: Deploy fail2ban jail.local
+  copy:
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+    content: |
+      [DEFAULT]
+      bantime = 10m
+      findtime = 10m
+      maxretry = 5
+      backend = systemd
+
+      [sshd]
+      enabled = true
+
+- name: Enable fail2ban
+  service:
+    name: fail2ban
+    enabled: true
+    state: started

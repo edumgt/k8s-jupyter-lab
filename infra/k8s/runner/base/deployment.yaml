@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-runner
+  template:
+    metadata:
+      labels:
+        app: gitlab-runner
+    spec:
+      serviceAccountName: gitlab-runner
+      nodeSelector:
+        kubernetes.io/hostname: k8s-worker-3
+      containers:
+        - name: gitlab-runner
+          image: harbor.local/data-platform/platform-gitlab-runner:alpine-v17.10.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - gitlab-runner
+            - run
+            - --config=/etc/gitlab-runner/config.toml
+            - --working-directory=/home/gitlab-runner
+            - --user=gitlab-runner
+          volumeMounts:
+            - name: runner-config
+              mountPath: /etc/gitlab-runner/config.toml
+              subPath: config.toml
+      volumes:
+        - name: runner-config
+          secret:
+            secretName: gitlab-runner-config

@@ -1,0 +1,11 @@
+kubernetes_apt_minor_version: "v1.34"
+kubernetes_pod_network_cidr: "10.244.0.0/16"
+kubernetes_cni_plugin: "calico"
+kubernetes_cni_manifest_filename: "{{ 'calico.yaml' if kubernetes_cni_plugin == 'calico' else 'kube-flannel.yml' }}"
+kubernetes_cni_manifest_url: "{{ 'https://raw.githubusercontent.com/projectcalico/calico/v3.31.2/manifests/calico.yaml' if kubernetes_cni_plugin == 'calico' else 'https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml' }}"
+kubernetes_cni_manifest_tmp_path: "/tmp/{{ kubernetes_cni_manifest_filename }}"
+kubernetes_admin_user: "ubuntu"
+kubernetes_kubelet_resolv_conf: "/run/systemd/resolve/resolv.conf"
+kubernetes_node_dns_servers:
+  - "1.1.1.1"
+  - "8.8.8.8"

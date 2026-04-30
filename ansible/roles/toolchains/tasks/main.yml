@@ -1,0 +1,54 @@
+- name: Install Python 3.12 tooling
+  apt:
+    name:
+      - build-essential
+      - python3-pip
+      - python3-venv
+      - python3.12-venv
+    state: present
+
+- name: Download NodeSource GPG key
+  get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /tmp/nodesource.gpg
+    mode: '0644'
+
+- name: Create NodeSource keyring
+  command: gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource.gpg
+  args:
+    creates: /etc/apt/keyrings/nodesource.gpg
+
+- name: Configure NodeSource repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main"
+    filename: nodesource
+    state: present
+
+- name: Install Node.js 22 runtime
+  apt:
+    name: nodejs
+    update_cache: true
+    state: present
+
+- name: Enable corepack
+  command: corepack enable
+  args:
+    creates: /usr/bin/pnpm
+
+- name: Check code-server binary
+  stat:
+    path: /usr/bin/code-server
+  register: code_server_binary
+
+- name: Install code-server
+  when: not code_server_binary.stat.exists
+  block:
+    - name: Install code-server globally with npm
+      npm:
+        name: code-server
+        global: true
+        unsafe_perm: true
+        state: present
+  rescue:
+    - name: Install code-server with official install script fallback
+      shell: curl -fsSL https://code-server.dev/install.sh | sh

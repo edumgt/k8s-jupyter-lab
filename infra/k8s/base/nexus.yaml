@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 80Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+spec:
+  type: NodePort
+  selector:
+    app: nexus
+  ports:
+    - port: 8081
+      targetPort: 8081
+      nodePort: 30091
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nexus
+  template:
+    metadata:
+      labels:
+        app: nexus
+    spec:
+      securityContext:
+        fsGroup: 200
+      initContainers:
+        - name: prepare-nexus-workdir
+          image: harbor.local/data-platform/platform-nexus3:3.90.1-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/log/audit
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/tmp
+              mkdir -p /opt/sonatype/sonatype-work/nexus3/javaprefs
+              chown -R 200:200 /opt/sonatype/sonatype-work/nexus3
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: nexus-data
+              mountPath: /opt/sonatype/sonatype-work/nexus3
+      containers:
+        - name: nexus
+          image: harbor.local/data-platform/platform-nexus3:3.90.1-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          ports:
+            - containerPort: 8081
+          env:
+            - name: NEXUS_DATA
+              value: /opt/sonatype/sonatype-work/nexus3
+            - name: INSTALL4J_ADD_VM_PARAMS
+              value: -Xms768m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/opt/sonatype/sonatype-work/nexus3/javaprefs
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            failureThreshold: 30
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            failureThreshold: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 1536Mi
+          volumeMounts:
+            - name: nexus-data
+              mountPath: /opt/sonatype/sonatype-work/nexus3
+      volumes:
+        - name: nexus-data
+          persistentVolumeClaim:
+            claimName: nexus-data

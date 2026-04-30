@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly MAX_BYTES=$((50 * 1024 * 1024))
+
+format_bytes() {
+  local bytes=$1
+  awk -v bytes="$bytes" '
+    BEGIN {
+      split("B KiB MiB GiB TiB", units, " ")
+      value = bytes + 0
+      unit = 1
+      while (value >= 1024 && unit < 5) {
+        value /= 1024
+        unit++
+      }
+      printf "%.1f %s", value, units[unit]
+    }
+  '
+}
+
+main() {
+  local -a blocked=()
+  local path=""
+  local blob_size=""
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+
+    case "$path" in
+      .tmp-k8s-images/*|dist/offline-bundle/*|packer/output-*/*)
+        blocked+=("$path [generated artifact path]")
+        continue
+        ;;
+      *.tar|*.tar.gz|*.tgz|*.zip|*.whl|*.ova|*.qcow2|*.vmdk|*.vdi)
+        blocked+=("$path [archive or VM image]")
+        continue
+        ;;
+    esac
+
+    blob_size="$(git cat-file -s ":$path" 2>/dev/null || true)"
+    if [ -n "$blob_size" ] && [ "$blob_size" -ge "$MAX_BYTES" ]; then
+      blocked+=("$path [$(format_bytes "$blob_size") staged size]")
+    fi
+  done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+  if [ "${#blocked[@]}" -eq 0 ]; then
+    exit 0
+  fi
+
+  echo "Commit blocked: generated artifacts or oversized files are staged."
+  echo
+  printf ' - %s\n' "${blocked[@]}"
+  echo
+  echo "Keep build outputs under ignored paths like dist/ or .tmp-k8s-images/."
+  echo "If something was staged by mistake, unstage it with:"
+  echo "  git restore --staged <path>"
+  echo
+  echo "If a large file already reached local history, remove it before pushing."
+  exit 1
+}
+
+main "$@"

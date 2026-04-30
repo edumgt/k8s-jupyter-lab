@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-workspace
+spec:
+  storageClassName: ""
+  volumeName: pv-dev-3node-jupyter-workspace

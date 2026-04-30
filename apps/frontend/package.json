@@ -1,0 +1,26 @@
+{
+  "name": "k8s-data-platform-frontend",
+  "private": true,
+  "version": "0.2.0",
+  "engines": {
+    "node": "22.22.x"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 31080 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
+  },
+  "dependencies": {
+    "ag-grid-community": "^34.3.1",
+    "ag-grid-vue3": "^34.3.1",
+    "@quasar/extras": "^1.16.17",
+    "quasar": "^2.18.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@quasar/vite-plugin": "^1.8.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "sass": "^1.85.1",
+    "vite": "^6.4.1"
+  }
+}

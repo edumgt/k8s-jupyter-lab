@@ -1,0 +1,42 @@
+#cloud-config
+autoinstall:
+  version: 1
+  refresh-installer:
+    update: false
+  identity:
+    hostname: k8s-data-platform
+    username: ubuntu
+    password: "$6$codexubuntu$QcR.tBJILzOz0qKkI1S4CWYQMS228FMl8h6OtOEacWmmkHXH0pwdhKbY9fvq7PnVK1rnL0J1htg2iMV2Q.wB21"
+  ssh:
+    install-server: true
+    allow-pw: true
+  apt:
+    geoip: false
+    mirror-selection:
+      primary:
+        - uri: "http://archive.ubuntu.com/ubuntu"
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  storage:
+    layout:
+      name: direct
+  packages:
+    - open-vm-tools
+    - virtualbox-guest-utils
+    - curl
+    - ca-certificates
+  user-data:
+    disable_root: true
+    ssh_pwauth: true
+    chpasswd:
+      expire: false
+      users:
+        - name: ubuntu
+          password: ubuntu
+          type: text
+  late-commands:
+    - curtin in-target --target=/target -- bash -c "echo 'ubuntu:ubuntu' | chpasswd"
+    - curtin in-target --target=/target -- install -d -m 0755 /etc/ssh/sshd_config.d
+    - curtin in-target --target=/target -- bash -c "printf '%s\n' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication no' 'PermitRootLogin no' > /etc/ssh/sshd_config.d/99-packer.conf"
+    - curtin in-target --target=/target -- systemctl enable ssh

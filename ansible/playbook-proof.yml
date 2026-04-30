@@ -1,0 +1,171 @@
+- hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - base
+    - security
+    - toolchains
+    - container_runtime
+    - kubernetes
+
+  tasks:
+    - name: Ensure platform root exists
+      file:
+        path: /opt/k8s-data-platform
+        state: directory
+        mode: '0755'
+
+    - name: Ensure platform runtime directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/k8s-data-platform/logs
+        - /etc/k8s-data-platform
+
+    - name: Ensure Nexus mirror alias exists in container runtime
+      shell: |
+        set -euo pipefail
+        target='harbor.local/data-platform/platform-nexus3:3.90.1-alpine'
+        source='docker.io/sonatype/nexus3:3.90.1-alpine'
+        if ! ctr -n k8s.io images ls -q | grep -Fq "${target}"; then
+          if ctr -n k8s.io images ls -q | grep -Fq "${source}"; then
+            ctr -n k8s.io images tag "${source}" "${target}" || true
+          else
+            echo "missing required image in containerd: ${target}" >&2
+            echo "preload offline bundle or build_k8s_images before running this proof playbook" >&2
+            exit 1
+          fi
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Copy operational scripts to host
+      copy:
+        src: "{{ playbook_dir }}/../scripts/"
+        dest: /opt/k8s-data-platform/scripts/
+        mode: preserve
+
+    - name: Normalize shell script line endings
+      shell: find /opt/k8s-data-platform/scripts -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
+    - name: Copy application sources to host
+      copy:
+        src: "{{ playbook_dir }}/../apps/"
+        dest: /opt/k8s-data-platform/apps/
+        mode: preserve
+
+    - name: Copy infrastructure manifests to host
+      copy:
+        src: "{{ playbook_dir }}/../infra/"
+        dest: /opt/k8s-data-platform/infra/
+        mode: preserve
+
+    - name: Copy documentation to host
+      copy:
+        src: "{{ playbook_dir }}/../docs/"
+        dest: /opt/k8s-data-platform/docs/
+        mode: preserve
+
+    - name: Copy root README to host
+      copy:
+        src: "{{ playbook_dir }}/../README.md"
+        dest: /opt/k8s-data-platform/README.md
+        mode: '0644'
+
+    - name: Configure code-server environment
+      copy:
+        dest: /etc/k8s-data-platform/code-server.env
+        mode: '0644'
+        content: |
+          PASSWORD=k8s-data-platform
+          LOG_LEVEL=info
+
+    - name: Install code-server systemd unit
+      copy:
+        dest: /etc/systemd/system/code-server.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=code-server
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=ubuntu
+          Group=ubuntu
+          EnvironmentFile=/etc/k8s-data-platform/code-server.env
+          WorkingDirectory=/opt/k8s-data-platform
+          ExecStart=/usr/bin/env code-server --bind-addr 0.0.0.0:30100 /opt/k8s-data-platform
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable code-server service
+      systemd:
+        name: code-server.service
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Ensure proof helper scripts are executable
+      file:
+        path: "{{ item }}"
+        mode: '0755'
+      loop:
+        - /opt/k8s-data-platform/scripts/apply_k8s.sh
+        - /opt/k8s-data-platform/scripts/reset_k8s.sh
+        - /opt/k8s-data-platform/scripts/status_k8s.sh
+        - /opt/k8s-data-platform/scripts/verify.sh
+        - /opt/k8s-data-platform/scripts/generate_join_command.sh
+        - /opt/k8s-data-platform/scripts/join_worker_node.sh
+        - /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh
+        - /opt/k8s-data-platform/scripts/setup_ingress_metallb.sh
+
+    - name: Install platform status helper
+      copy:
+        dest: /usr/local/bin/platform-status.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec bash /opt/k8s-data-platform/scripts/status_k8s.sh "$@"
+
+    - name: Install platform verify helper
+      copy:
+        dest: /usr/local/bin/platform-verify-ova.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          TARGET_HOST="${1:-127.0.0.1}"
+          shift || true
+          exec bash /opt/k8s-data-platform/scripts/verify.sh --http-mode nodeport --host "${TARGET_HOST}" "$@"
+
+    - name: Install platform join command helper
+      copy:
+        dest: /usr/local/bin/platform-kubeadm-join.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec sudo bash /opt/k8s-data-platform/scripts/generate_join_command.sh "$@"
+
+    - name: Install platform multi-node configure helper
+      copy:
+        dest: /usr/local/bin/platform-configure-multinode.sh
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec sudo bash /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh "$@"
+
+    - name: Mark bootstrap complete
+      file:
+        path: /opt/k8s-data-platform/.bootstrap-complete
+        state: touch
+        mode: '0644'

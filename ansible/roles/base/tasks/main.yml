@@ -1,0 +1,56 @@
+- name: Install base packages
+  apt:
+    name:
+      - acl
+      - apt-transport-https
+      - ca-certificates
+      - chrony
+      - curl
+      - git
+      - gnupg
+      - jq
+      - logrotate
+      - make
+      - net-tools
+      - rsync
+      - software-properties-common
+      - tar
+      - unzip
+      - unattended-upgrades
+      - vim
+      - wget
+      - zip
+    state: present
+    update_cache: true
+
+- name: Ensure chrony started
+  service:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Copy platform healthcheck script
+  copy:
+    src: "{{ playbook_dir }}/../scripts/healthcheck.sh"
+    dest: /usr/local/bin/healthcheck.sh
+    mode: '0755'
+
+- name: Ensure local healthcheck library directory exists
+  file:
+    path: /usr/local/bin/lib
+    state: directory
+    mode: '0755'
+
+- name: Copy Kubernetes runtime helper library
+  copy:
+    src: "{{ playbook_dir }}/../scripts/lib/kubernetes_runtime.sh"
+    dest: /usr/local/bin/lib/kubernetes_runtime.sh
+    mode: '0644'
+
+- name: Configure unattended upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: '0644'

@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  template:
+    spec:
+      containers:
+        - name: mongodb
+          env:
+            - name: MONGO_INITDB_DATABASE
+              value: platform_dev

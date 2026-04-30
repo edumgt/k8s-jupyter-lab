@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-config
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-logs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab-web
+spec:
+  type: NodePort
+  selector:
+    app: gitlab
+  ports:
+    - name: http
+      port: 8929
+      targetPort: 80
+      nodePort: 30089
+    - name: ssh
+      port: 22
+      targetPort: 22
+      nodePort: 30224
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab
+  template:
+    metadata:
+      labels:
+        app: gitlab
+    spec:
+      containers:
+        - name: gitlab
+          image: harbor.local/data-platform/platform-gitlab-ce:17.10.0-ce.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+            - containerPort: 22
+          env:
+            - name: GITLAB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: GITLAB_ROOT_PASSWORD
+            - name: GITLAB_OMNIBUS_CONFIG
+              value: |
+                external_url 'http://localhost'
+                gitlab_rails['gitlab_shell_ssh_port'] = 30224
+                gitlab_rails['initial_root_password'] = ENV['GITLAB_ROOT_PASSWORD']
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 2Gi
+          volumeMounts:
+            - name: gitlab-config
+              mountPath: /etc/gitlab
+            - name: gitlab-logs
+              mountPath: /var/log/gitlab
+            - name: gitlab-data
+              mountPath: /var/opt/gitlab
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: gitlab-config
+          persistentVolumeClaim:
+            claimName: gitlab-config
+        - name: gitlab-logs
+          persistentVolumeClaim:
+            claimName: gitlab-logs
+        - name: gitlab-data
+          persistentVolumeClaim:
+            claimName: gitlab-data
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

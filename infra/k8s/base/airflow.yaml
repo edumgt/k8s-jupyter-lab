@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: airflow-control-plane-reader
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: airflow-control-plane-reader
+subjects:
+  - kind: ServiceAccount
+    name: airflow
+    namespace: data-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: airflow-control-plane-reader
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+spec:
+  type: NodePort
+  selector:
+    app: airflow
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      serviceAccountName: airflow
+      containers:
+        - name: airflow
+          image: harbor.local/data-platform/k8s-data-platform-airflow:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              airflow db migrate
+              airflow users create \
+                --username "${_AIRFLOW_WWW_USER_USERNAME}" \
+                --password "${_AIRFLOW_WWW_USER_PASSWORD}" \
+                --firstname Platform \
+                --lastname Admin \
+                --role Admin \
+                --email "${_AIRFLOW_WWW_USER_EMAIL}" || true
+              airflow scheduler >/tmp/airflow-scheduler.log 2>&1 &
+              exec airflow webserver --hostname 0.0.0.0 --port 8080
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "false"
+            - name: AIRFLOW__WEBSERVER__WEB_SERVER_HOST
+              value: "0.0.0.0"
+            - name: AIRFLOW__WEBSERVER__WEB_SERVER_PORT
+              value: "8080"
+            - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+              value: "true"
+            - name: _AIRFLOW_WWW_USER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: AIRFLOW_ADMIN_USERNAME
+            - name: _AIRFLOW_WWW_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-secrets
+                  key: AIRFLOW_ADMIN_PASSWORD
+            - name: _AIRFLOW_WWW_USER_EMAIL
+              value: admin@example.com

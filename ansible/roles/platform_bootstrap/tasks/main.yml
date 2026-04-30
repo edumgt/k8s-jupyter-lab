@@ -1,0 +1,293 @@
+- name: Ensure platform root exists
+  file:
+    path: /opt/k8s-data-platform
+    state: directory
+    mode: '0755'
+
+- name: Ensure platform runtime directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt/k8s-data-platform/offline-bundle
+    - /opt/k8s-data-platform/logs
+    - /etc/k8s-data-platform
+
+- name: Copy application sources to host
+  copy:
+    src: "{{ playbook_dir }}/../apps/"
+    dest: /opt/k8s-data-platform/apps/
+    mode: preserve
+
+- name: Copy infrastructure manifests to host
+  copy:
+    src: "{{ playbook_dir }}/../infra/"
+    dest: /opt/k8s-data-platform/infra/
+    mode: preserve
+
+- name: Copy operational scripts to host
+  copy:
+    src: "{{ playbook_dir }}/../scripts/"
+    dest: /opt/k8s-data-platform/scripts/
+    mode: preserve
+
+- name: Normalize shell script line endings
+  shell: find /opt/k8s-data-platform/scripts -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
+- name: Copy documentation to host
+  copy:
+    src: "{{ playbook_dir }}/../docs/"
+    dest: /opt/k8s-data-platform/docs/
+    mode: preserve
+
+- name: Copy root README to host
+  copy:
+    src: "{{ playbook_dir }}/../README.md"
+    dest: /opt/k8s-data-platform/README.md
+    mode: '0644'
+
+- name: Ensure platform scripts are executable
+  file:
+    path: "{{ item }}"
+    mode: '0755'
+  loop:
+    - /opt/k8s-data-platform/scripts/apply_k8s.sh
+    - /opt/k8s-data-platform/scripts/reset_k8s.sh
+    - /opt/k8s-data-platform/scripts/status_k8s.sh
+    - /opt/k8s-data-platform/scripts/import_offline_bundle.sh
+    - /opt/k8s-data-platform/scripts/prepare_offline_bundle.sh
+    - /opt/k8s-data-platform/scripts/frontend_dev_setup.sh
+    - /opt/k8s-data-platform/scripts/run_frontend_dev.sh
+    - /opt/k8s-data-platform/scripts/run_frontend_build.sh
+    - /opt/k8s-data-platform/scripts/verify.sh
+    - /opt/k8s-data-platform/scripts/generate_join_command.sh
+    - /opt/k8s-data-platform/scripts/join_worker_node.sh
+    - /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh
+    - /opt/k8s-data-platform/scripts/setup_ingress_metallb.sh
+
+- name: Configure code-server environment
+  copy:
+    dest: /etc/k8s-data-platform/code-server.env
+    mode: '0644'
+    content: |
+      PASSWORD=k8s-data-platform
+      LOG_LEVEL=info
+
+- name: Install code-server systemd unit
+  copy:
+    dest: /etc/systemd/system/code-server.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=code-server
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=ubuntu
+      Group=ubuntu
+      EnvironmentFile=/etc/k8s-data-platform/code-server.env
+      WorkingDirectory=/opt/k8s-data-platform
+      ExecStart=/usr/bin/env code-server --bind-addr 0.0.0.0:30100 /opt/k8s-data-platform
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable code-server service
+  systemd:
+    name: code-server.service
+    enabled: true
+    state: restarted
+    daemon_reload: true
+
+- name: Preload platform images into Docker and Kubernetes runtime
+  command:
+    argv:
+      - bash
+      - /opt/k8s-data-platform/scripts/build_k8s_images.sh
+      - --namespace
+      - data-platform
+      - --tag
+      - latest
+  args:
+    chdir: /opt/k8s-data-platform
+    creates: /opt/k8s-data-platform/.image-cache-ready
+
+- name: Mark image cache ready
+  file:
+    path: /opt/k8s-data-platform/.image-cache-ready
+    state: touch
+    mode: '0644'
+
+- name: Prepare offline dependency bundle
+  command:
+    argv:
+      - bash
+      - /opt/k8s-data-platform/scripts/prepare_offline_bundle.sh
+      - --out-dir
+      - /opt/k8s-data-platform/offline-bundle
+      - --skip-images
+  args:
+    chdir: /opt/k8s-data-platform
+    creates: /opt/k8s-data-platform/offline-bundle/k8s/README.offline.md
+
+- name: Apply default dev platform overlay
+  command:
+    argv:
+      - bash
+      - /opt/k8s-data-platform/scripts/apply_k8s.sh
+      - --env
+      - dev
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  args:
+    chdir: /opt/k8s-data-platform
+    creates: /opt/k8s-data-platform/.platform-dev-applied
+
+- name: Mark default dev platform overlay applied
+  file:
+    path: /opt/k8s-data-platform/.platform-dev-applied
+    state: touch
+    mode: '0644'
+
+- name: Bootstrap Nexus repositories and warm offline development caches
+  command:
+    argv:
+      - bash
+      - /opt/k8s-data-platform/scripts/setup_nexus_offline.sh
+      - --namespace
+      - data-platform-dev
+      - --nexus-url
+      - http://127.0.0.1:30091
+      - --target-password
+      - nexus123!
+      - --username
+      - admin
+      - --password
+      - nexus123!
+      - --python-seed-file
+      - /opt/k8s-data-platform/scripts/offline/python-dev-seed.txt
+      - --npm-seed-file
+      - /opt/k8s-data-platform/scripts/offline/npm-dev-seed.txt
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  args:
+    chdir: /opt/k8s-data-platform
+    creates: /opt/k8s-data-platform/.nexus-offline-ready
+
+- name: Mark Nexus offline warm-up completed
+  file:
+    path: /opt/k8s-data-platform/.nexus-offline-ready
+    state: touch
+    mode: '0644'
+
+- name: Install platform offline bundle import helper
+  copy:
+    dest: /usr/local/bin/platform-import-bundle.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      bash /opt/k8s-data-platform/scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle "$@"
+
+- name: Install platform apply helper
+  copy:
+    dest: /usr/local/bin/platform-apply.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/apply_k8s.sh "$@"
+
+- name: Install platform reset helper
+  copy:
+    dest: /usr/local/bin/platform-reset.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/reset_k8s.sh "$@"
+
+- name: Install platform status helper
+  copy:
+    dest: /usr/local/bin/platform-status.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/status_k8s.sh "$@"
+
+- name: Install platform verify helper
+  copy:
+    dest: /usr/local/bin/platform-verify-ova.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      TARGET_HOST="${1:-127.0.0.1}"
+      shift || true
+      exec bash /opt/k8s-data-platform/scripts/verify.sh --http-mode nodeport --host "${TARGET_HOST}" "$@"
+
+- name: Install platform join command helper
+  copy:
+    dest: /usr/local/bin/platform-kubeadm-join.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec sudo bash /opt/k8s-data-platform/scripts/generate_join_command.sh "$@"
+
+- name: Install platform multi-node configure helper
+  copy:
+    dest: /usr/local/bin/platform-configure-multinode.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec sudo bash /opt/k8s-data-platform/scripts/configure_multinode_cluster.sh "$@"
+
+- name: Install platform frontend setup helper
+  copy:
+    dest: /usr/local/bin/platform-frontend-setup.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/frontend_dev_setup.sh "$@"
+
+- name: Install platform frontend dev helper
+  copy:
+    dest: /usr/local/bin/platform-frontend-dev.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/run_frontend_dev.sh "$@"
+
+- name: Install platform frontend build helper
+  copy:
+    dest: /usr/local/bin/platform-frontend-build.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec bash /opt/k8s-data-platform/scripts/run_frontend_build.sh "$@"
+
+- name: Write host bootstrap note
+  copy:
+    dest: /opt/k8s-data-platform/README.host.md
+    mode: '0644'
+    content: |
+      # Host Quickstart
+      kubectl apply -k /opt/k8s-data-platform/infra/k8s/overlays/dev
+      kubectl get pods -n data-platform-dev
+      kubectl get svc -n data-platform-dev
+      kubectl get pvc -n data-platform-dev
+      platform-import-bundle.sh --apply --env dev
+      bash /opt/k8s-data-platform/scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://127.0.0.1:30091
+      platform-frontend-setup.sh
+      platform-frontend-dev.sh
+      platform-verify-ova.sh 127.0.0.1
