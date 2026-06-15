@@ -739,12 +739,10 @@ const browserHost = typeof window !== "undefined" ? window.location.hostname : "
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || `${browserProtocol}//${browserHost}`;
 const frontendAppVersion = frontendPackage.version;
 
-const savedAuthToken =
-  typeof window !== "undefined" ? window.localStorage.getItem("appAuthToken") || "" : "";
-const savedAuthUser =
+const savedUsername =
   typeof window !== "undefined" && window.localStorage.getItem("appAuthUser")
-    ? JSON.parse(window.localStorage.getItem("appAuthUser"))
-    : null;
+    ? (JSON.parse(window.localStorage.getItem("appAuthUser"))?.username || "")
+    : "";
 
 const loading = ref(true);
 const queryLoading = ref(false);
@@ -763,11 +761,11 @@ const demoAccounts = ref([
 ]);
 
 const loginForm = ref({
-  username: savedAuthUser?.username || "test1@test.com",
-  password: "123456",
+  username: savedUsername || "test1@test.com",
+  password: "",
 });
 
-const appSession = ref(emptyAppSession(savedAuthToken, savedAuthUser));
+const appSession = ref(emptyAppSession());
 const labSession = ref(emptyLabSession());
 const snapshotState = ref(emptySnapshotState());
 const adminOverview = ref(emptyAdminOverview());
@@ -1378,27 +1376,6 @@ async function loadUserUsage(options = {}) {
   }
 }
 
-async function restoreAuthSession() {
-  if (!appSession.value.token) {
-    return;
-  }
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/auth/me`, {
-      headers: authHeaders(),
-    });
-    const payload = await parseJson(response);
-    appSession.value = emptyAppSession(appSession.value.token, payload.user);
-    persistAppSession(appSession.value.token, payload.user);
-  } catch (error) {
-    clearAppSessionStorage();
-    appSession.value = emptyAppSession();
-    Notify.create({
-      type: "warning",
-      message: error.message,
-    });
-  }
-}
-
 async function loginApp() {
   if (authLoading.value) {
     return;
@@ -1901,36 +1878,8 @@ function openLab() {
 
 onMounted(async () => {
   await loadDemoUsers();
-  await restoreAuthSession();
   authResolved.value = true;
-
-  if (!isAuthenticated.value) {
-    loading.value = false;
-    return;
-  }
-
-  await loadDashboard();
-  await runFirstQuery();
-
-  if (isUser.value) {
-    await refreshLabSession({ silent: true, skipSnapshotRefresh: true });
-    await refreshSnapshotStatus({ silent: true });
-    if (snapshotState.value.status === "building" || snapshotState.value.status === "pending") {
-      void waitForSnapshotCompletion({
-        notifyWaiting: false,
-        notifyFailure: false,
-        notifyTimeout: false,
-        timeoutMs: 180000,
-      });
-    }
-    await loadUserUsage({ silent: true });
-  }
-
-  if (isAdmin.value) {
-    await loadAdminOverview({ silent: true });
-    await loadControlPlaneDashboard({ silent: true });
-    startAdminPolling();
-  }
+  loading.value = false;
 });
 
 onUnmounted(() => {

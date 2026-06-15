@@ -4,9 +4,10 @@ metadata:
   name: platform-config
 data:
   PLATFORM_ENV: dev
-  PLATFORM_BACKEND_URL: http://dev-api.platform.local/docs
-  PLATFORM_FRONTEND_URL: http://dev.platform.local
-  PLATFORM_JUPYTER_URL: http://jupyter.platform.local/lab
+  PLATFORM_BACKEND_URL: http://192.168.253.149:30081/docs
+  PLATFORM_FRONTEND_URL: http://192.168.253.149:30080
+  PLATFORM_JUPYTER_URL: http://192.168.253.149:30088/lab
+  PLATFORM_CORS_ALLOW_ORIGINS: "http://192.168.253.149:30080,http://192.168.253.149:5173,http://dev.platform.local,http://platform.local,http://www.platform.local"
   PLATFORM_JUPYTER_IMAGE: edumgt/k8s-data-platform-jupyter:latest
   PLATFORM_JUPYTER_WORKSPACE_PVC: jupyter-workspace
   PLATFORM_JUPYTER_WORKSPACE_ROOT: /workspace/user-home

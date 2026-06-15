@@ -6,16 +6,16 @@ data:
   PLATFORM_ENV: base
   PLATFORM_MONGO_URL: mongodb://mongodb:27017/platform
   PLATFORM_REDIS_URL: redis://redis:6379/0
-  PLATFORM_BACKEND_URL: http://localhost:30081/docs
-  PLATFORM_FRONTEND_URL: http://localhost:30080
-  PLATFORM_CONTROL_PLANE_URL: http://localhost:30080/#control-plane
-  PLATFORM_ADMIN_URL: http://localhost:30080/#sandbox-admin
-  PLATFORM_AIRFLOW_URL: http://localhost:30090
-  PLATFORM_JUPYTER_URL: http://localhost:30088/lab
-  PLATFORM_GITLAB_URL: http://localhost:30089
-  PLATFORM_NEXUS_URL: http://localhost:30091
-  PLATFORM_PYPI_INDEX_URL: http://localhost:30091/repository/pypi-all/simple
-  PLATFORM_NPM_REGISTRY: http://localhost:30091/repository/npm-all/
+  PLATFORM_BACKEND_URL: http://192.168.253.149:30081/docs
+  PLATFORM_FRONTEND_URL: http://192.168.253.149:30080
+  PLATFORM_CONTROL_PLANE_URL: http://192.168.253.149:30080/#control-plane
+  PLATFORM_ADMIN_URL: http://192.168.253.149:30080/#sandbox-admin
+  PLATFORM_AIRFLOW_URL: http://192.168.253.149:30090
+  PLATFORM_JUPYTER_URL: http://192.168.253.149:30088/lab
+  PLATFORM_GITLAB_URL: http://192.168.253.149:30089
+  PLATFORM_NEXUS_URL: http://192.168.253.149:30091
+  PLATFORM_PYPI_INDEX_URL: http://192.168.253.149:30091/repository/pypi-all/simple
+  PLATFORM_NPM_REGISTRY: http://192.168.253.149:30091/repository/npm-all/
   PLATFORM_HARBOR_URL: http://harbor.local:30083
   PLATFORM_HARBOR_REGISTRY: harbor.local
   PLATFORM_HARBOR_PROJECT: data-platform
