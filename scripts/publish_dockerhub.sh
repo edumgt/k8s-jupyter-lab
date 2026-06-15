@@ -52,7 +52,7 @@ done
 export IMAGE_NAMESPACE
 export IMAGE_TAG
 
-cmd=(bash "${ROOT_DIR}/scripts/build_k8s_images.sh" --namespace "${IMAGE_NAMESPACE}" --tag "${IMAGE_TAG}" --push --skip-runtime-import)
+cmd=(bash "${ROOT_DIR}/scripts/build_k8s_images.sh" --namespace "${IMAGE_NAMESPACE}" --tag "${IMAGE_TAG}" --push --skip-runtime-import --skip-support-images)
 
 if [[ "${DRY_RUN}" == "1" ]]; then
   printf '+'

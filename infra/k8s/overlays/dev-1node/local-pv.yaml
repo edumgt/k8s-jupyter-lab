@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-dev-1node-jupyter-workspace
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: data-platform-dev
+    name: jupyter-workspace
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - w1
+  hostPath:
+    path: /var/lib/k8s-data-platform/pv/jupyter-workspace
+    type: DirectoryOrCreate

@@ -38,7 +38,7 @@ spec:
     spec:
       initContainers:
         - name: seed-shared-workspace
-          image: harbor.local/data-platform/k8s-data-platform-jupyter:latest
+          image: edumgt/k8s-data-platform-jupyter:latest
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -67,7 +67,7 @@ spec:
               mountPath: /workspace-volume
       containers:
         - name: jupyter
-          image: harbor.local/data-platform/k8s-data-platform-jupyter:latest
+          image: edumgt/k8s-data-platform-jupyter:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8888

@@ -187,7 +187,6 @@ SUPPORT_IMAGES=(
 PLATFORM_IMAGES=(
   "backend|apps/backend|$(platform_app_image backend)|"
   "frontend|apps/frontend|$(platform_app_image frontend)|"
-  "airflow|apps/airflow|$(platform_app_image airflow)|"
   "jupyter|apps/jupyter|$(platform_app_image jupyter)|"
 )
 

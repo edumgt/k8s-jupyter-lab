@@ -4,14 +4,11 @@ kind: Kustomization
 resources:
   - platform-configmap.yaml
   - platform-secrets.yaml
-  - mongodb.yaml
-  - redis.yaml
   - backend.yaml
   - frontend.yaml
-  - airflow.yaml
   - jupyter.yaml
-  - gitlab.yaml
-  - nexus.yaml
+  - mongodb.yaml
+  - redis.yaml
 
 labels:
   - pairs:

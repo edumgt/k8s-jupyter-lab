@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: w1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyter
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: w1
+      containers:
+        - name: jupyter
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              mkdir -p "${JUPYTER_ROOT_DIR:-/workspace}"
+              exec jupyter lab \
+                --ip=0.0.0.0 \
+                --port=8888 \
+                --no-browser \
+                --allow-root \
+                --ServerApp.token="" \
+                --ServerApp.password="" \
+                --ServerApp.allow_origin="*" \
+                --ServerApp.root_dir="${JUPYTER_ROOT_DIR:-/workspace}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: w1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: w1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: w1

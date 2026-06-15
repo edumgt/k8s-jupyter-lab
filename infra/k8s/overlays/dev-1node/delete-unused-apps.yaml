@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab
+  $patch: delete
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus
+  $patch: delete
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  $patch: delete
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  $patch: delete
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab-web
+  $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+  $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+  $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  $patch: delete
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-config
+  $patch: delete
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-logs
+  $patch: delete
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-data
+  $patch: delete
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-data
+  $patch: delete
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow
+  $patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: airflow-control-plane-reader
+  $patch: delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: airflow-control-plane-reader
+  $patch: delete

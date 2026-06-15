@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: harbor.local/data-platform/platform-redis:7-alpine
+          image: redis:7-alpine
           args: ["redis-server", "--appendonly", "yes"]
           ports:
             - containerPort: 6379

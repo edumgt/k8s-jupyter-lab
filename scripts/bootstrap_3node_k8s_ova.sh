@@ -117,8 +117,13 @@ INGRESS_MANIFEST="${INGRESS_MANIFEST:-}"
 [[ -n "${CONTROL_PLANE_IP}" ]] || die "CONTROL_PLANE_IP is required."
 [[ -n "${WORKER1_SSH_HOST}" ]] || die "WORKER1_SSH_HOST is required."
 [[ -n "${WORKER1_IP}" ]] || die "WORKER1_IP is required."
-[[ -n "${WORKER2_SSH_HOST}" ]] || die "WORKER2_SSH_HOST is required."
-[[ -n "${WORKER2_IP}" ]] || die "WORKER2_IP is required."
+
+ENABLE_WORKER2=0
+if [[ -n "${WORKER2_SSH_HOST}" || -n "${WORKER2_IP}" ]]; then
+  [[ -n "${WORKER2_SSH_HOST}" ]] || die "WORKER2_SSH_HOST is required when WORKER2_IP is set."
+  [[ -n "${WORKER2_IP}" ]] || die "WORKER2_IP is required when WORKER2_SSH_HOST is set."
+  ENABLE_WORKER2=1
+fi
 
 ENABLE_WORKER3=0
 if [[ -n "${WORKER3_SSH_HOST}" || -n "${WORKER3_IP}" ]]; then
@@ -238,7 +243,10 @@ default_ingress_values() {
   fi
 }
 
-HOSTS_BLOCK="${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}"$'\n'"${WORKER1_IP} ${WORKER1_HOSTNAME}"$'\n'"${WORKER2_IP} ${WORKER2_HOSTNAME}"
+HOSTS_BLOCK="${CONTROL_PLANE_IP} ${CONTROL_PLANE_HOSTNAME}"$'\n'"${WORKER1_IP} ${WORKER1_HOSTNAME}"
+if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+  HOSTS_BLOCK="${HOSTS_BLOCK}"$'\n'"${WORKER2_IP} ${WORKER2_HOSTNAME}"
+fi
 if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
   HOSTS_BLOCK="${HOSTS_BLOCK}"$'\n'"${WORKER3_IP} ${WORKER3_HOSTNAME}"
 fi
@@ -374,7 +382,9 @@ ensure_worker_joined() {
 log "Checking SSH connectivity"
 wait_for_ssh "${CONTROL_PLANE_SSH_HOST}" "control-plane bootstrap"
 wait_for_ssh "${WORKER1_SSH_HOST}" "worker1 bootstrap"
-wait_for_ssh "${WORKER2_SSH_HOST}" "worker2 bootstrap"
+if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+  wait_for_ssh "${WORKER2_SSH_HOST}" "worker2 bootstrap"
+fi
 if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
   wait_for_ssh "${WORKER3_SSH_HOST}" "worker3 bootstrap"
 fi
@@ -382,7 +392,9 @@ fi
 if ! is_true "${SKIP_NETWORK}"; then
   configure_node_network "${CONTROL_PLANE_SSH_HOST}" "${CONTROL_PLANE_IP}" "${CONTROL_PLANE_HOSTNAME}"
   configure_node_network "${WORKER1_SSH_HOST}" "${WORKER1_IP}" "${WORKER1_HOSTNAME}"
-  configure_node_network "${WORKER2_SSH_HOST}" "${WORKER2_IP}" "${WORKER2_HOSTNAME}"
+  if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+    configure_node_network "${WORKER2_SSH_HOST}" "${WORKER2_IP}" "${WORKER2_HOSTNAME}"
+  fi
   if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
     configure_node_network "${WORKER3_SSH_HOST}" "${WORKER3_IP}" "${WORKER3_HOSTNAME}"
   fi
@@ -395,21 +407,28 @@ if ! is_true "${SKIP_JOIN}"; then
   JOIN_COMMAND_B64="$(printf '%s' "${JOIN_COMMAND}" | base64 -w 0)"
 
   ensure_worker_joined "${WORKER1_IP}" "${WORKER1_HOSTNAME}" "${JOIN_COMMAND_B64}"
-  ensure_worker_joined "${WORKER2_IP}" "${WORKER2_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+    ensure_worker_joined "${WORKER2_IP}" "${WORKER2_HOSTNAME}" "${JOIN_COMMAND_B64}"
+  fi
   if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
     ensure_worker_joined "${WORKER3_IP}" "${WORKER3_HOSTNAME}" "${JOIN_COMMAND_B64}"
   fi
 
   log "Waiting for worker nodes to become Ready"
   ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER1_HOSTNAME} --timeout=420s"
-  ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER2_HOSTNAME} --timeout=420s"
+  if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+    ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER2_HOSTNAME} --timeout=420s"
+  fi
   if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
     ssh_run_sudo "${CONTROL_PLANE_IP}" "KUBECONFIG=/etc/kubernetes/admin.conf kubectl wait --for=condition=Ready node/${WORKER3_HOSTNAME} --timeout=420s"
   fi
 fi
 
 if is_true "${APPLY_OVERLAY}"; then
-  OVERLAY_WORKERS="${WORKER1_HOSTNAME},${WORKER2_HOSTNAME}"
+  OVERLAY_WORKERS="${WORKER1_HOSTNAME}"
+  if [[ "${ENABLE_WORKER2}" -eq 1 ]]; then
+    OVERLAY_WORKERS="${OVERLAY_WORKERS},${WORKER2_HOSTNAME}"
+  fi
   if [[ "${ENABLE_WORKER3}" -eq 1 ]]; then
     OVERLAY_WORKERS="${OVERLAY_WORKERS},${WORKER3_HOSTNAME}"
   fi

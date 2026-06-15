@@ -19,6 +19,7 @@ FORCE_BUILD=0
 FORCE_RECREATE_WORKERS=0
 SKIP_BOOTSTRAP=0
 STATIC_NETWORK=0
+SINGLE_WORKER=0
 APPLY_OVERLAY=1
 REGISTER_IN_WORKSTATION=1
 VM_START_MODE="${VM_START_MODE:-nogui}"
@@ -499,6 +500,10 @@ while [[ $# -gt 0 ]]; do
       APPLY_OVERLAY=0
       shift
       ;;
+    --single-worker)
+      SINGLE_WORKER=1
+      shift
+      ;;
     --static-network)
       STATIC_NETWORK=1
       shift
@@ -646,16 +651,24 @@ esac
 if [[ "${STATIC_NETWORK}" -eq 1 ]]; then
   [[ -n "${CONTROL_PLANE_IP}" ]] || die "--control-plane-ip is required with --static-network"
   [[ -n "${WORKER1_IP}" ]] || die "--worker1-ip is required with --static-network"
-  [[ -n "${WORKER2_IP}" ]] || die "--worker2-ip is required with --static-network"
-  [[ -n "${WORKER3_IP}" ]] || die "--worker3-ip is required with --static-network"
+  if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+    [[ -n "${WORKER2_IP}" ]] || die "--worker2-ip is required with --static-network"
+    [[ -n "${WORKER3_IP}" ]] || die "--worker3-ip is required with --static-network"
+  fi
   [[ -n "${GATEWAY}" ]] || die "--gateway is required with --static-network"
   if [[ -z "${DNS_SERVERS}" ]]; then
     DNS_SERVERS="${GATEWAY},1.1.1.1,8.8.8.8"
   fi
 fi
 
-if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER3_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER3_NAME}" || "${WORKER2_NAME}" == "${WORKER3_NAME}" ]]; then
-  die "VM names must be unique across control-plane/worker1/worker2/worker3."
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER2_NAME}" || "${CONTROL_PLANE_NAME}" == "${WORKER3_NAME}" || "${WORKER1_NAME}" == "${WORKER2_NAME}" || "${WORKER1_NAME}" == "${WORKER3_NAME}" || "${WORKER2_NAME}" == "${WORKER3_NAME}" ]]; then
+    die "VM names must be unique across control-plane/worker1/worker2/worker3."
+  fi
+else
+  if [[ "${CONTROL_PLANE_NAME}" == "${WORKER1_NAME}" ]]; then
+    die "VM names must be unique (control-plane vs worker1)."
+  fi
 fi
 
 RUNTIME_DIR="$(mktemp -d)"
@@ -717,38 +730,54 @@ stop_vm_if_running "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
 
 log "Step 2/4: Ensuring worker clones exist"
 ensure_worker_clone "${WORKER1_NAME}" "${WORKER1_VMX_WIN}" "${WORKER1_VMX_WSL}"
-ensure_worker_clone "${WORKER2_NAME}" "${WORKER2_VMX_WIN}" "${WORKER2_VMX_WSL}"
-ensure_worker_clone "${WORKER3_NAME}" "${WORKER3_VMX_WIN}" "${WORKER3_VMX_WSL}"
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  ensure_worker_clone "${WORKER2_NAME}" "${WORKER2_VMX_WIN}" "${WORKER2_VMX_WSL}"
+  ensure_worker_clone "${WORKER3_NAME}" "${WORKER3_VMX_WIN}" "${WORKER3_VMX_WSL}"
+fi
 
 if [[ "${REGISTER_IN_WORKSTATION}" -eq 1 ]]; then
   log "Step 2.5/4: Registering VMX files in VMware Workstation UI"
   register_vm_in_workstation "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
   register_vm_in_workstation "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
-  register_vm_in_workstation "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
-  register_vm_in_workstation "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
+  if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+    register_vm_in_workstation "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+    register_vm_in_workstation "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
+  fi
 fi
 
 log "Step 3/4: Starting VMs"
 start_vm_if_needed "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}"
 start_vm_if_needed "${WORKER1_VMX_WIN}" "${WORKER1_NAME}"
-start_vm_if_needed "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
-start_vm_if_needed "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  start_vm_if_needed "${WORKER2_VMX_WIN}" "${WORKER2_NAME}"
+  start_vm_if_needed "${WORKER3_VMX_WIN}" "${WORKER3_NAME}"
+fi
 
 log "Waiting for guest IPs from VMware Tools"
 CONTROL_PLANE_SSH_HOST="$(wait_for_vm_ip "${CONTROL_PLANE_VMX_WIN}" "${CONTROL_PLANE_NAME}")"
 WORKER1_SSH_HOST="$(wait_for_vm_ip "${WORKER1_VMX_WIN}" "${WORKER1_NAME}")"
-WORKER2_SSH_HOST="$(wait_for_vm_ip "${WORKER2_VMX_WIN}" "${WORKER2_NAME}")"
-WORKER3_SSH_HOST="$(wait_for_vm_ip "${WORKER3_VMX_WIN}" "${WORKER3_NAME}")"
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  WORKER2_SSH_HOST="$(wait_for_vm_ip "${WORKER2_VMX_WIN}" "${WORKER2_NAME}")"
+  WORKER3_SSH_HOST="$(wait_for_vm_ip "${WORKER3_VMX_WIN}" "${WORKER3_NAME}")"
+fi
 
-if [[ "${CONTROL_PLANE_SSH_HOST}" == "${WORKER1_SSH_HOST}" || "${CONTROL_PLANE_SSH_HOST}" == "${WORKER2_SSH_HOST}" || "${CONTROL_PLANE_SSH_HOST}" == "${WORKER3_SSH_HOST}" || "${WORKER1_SSH_HOST}" == "${WORKER2_SSH_HOST}" || "${WORKER1_SSH_HOST}" == "${WORKER3_SSH_HOST}" || "${WORKER2_SSH_HOST}" == "${WORKER3_SSH_HOST}" ]]; then
-  if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
-    log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}, ${WORKER3_SSH_HOST})."
-    log "WARNING: For stable multi-node bootstrap, rerun with --static-network and unique IPs."
-  elif [[ "${STATIC_NETWORK}" -eq 1 ]]; then
-    log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}, ${WORKER3_SSH_HOST})."
-    log "WARNING: Continuing because --static-network is enabled; bootstrap will assign unique static IPs."
-  else
-    die "Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}, ${WORKER3_SSH_HOST}). Rerun with --static-network and unique control-plane/worker IPs."
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  if [[ "${CONTROL_PLANE_SSH_HOST}" == "${WORKER1_SSH_HOST}" || "${CONTROL_PLANE_SSH_HOST}" == "${WORKER2_SSH_HOST}" || "${CONTROL_PLANE_SSH_HOST}" == "${WORKER3_SSH_HOST}" || "${WORKER1_SSH_HOST}" == "${WORKER2_SSH_HOST}" || "${WORKER1_SSH_HOST}" == "${WORKER3_SSH_HOST}" || "${WORKER2_SSH_HOST}" == "${WORKER3_SSH_HOST}" ]]; then
+    if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
+      log "WARNING: Duplicate DHCP IPs detected across VMs (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}, ${WORKER2_SSH_HOST}, ${WORKER3_SSH_HOST})."
+    elif [[ "${STATIC_NETWORK}" -eq 1 ]]; then
+      log "WARNING: Duplicate DHCP IPs detected. Continuing (--static-network will assign unique IPs)."
+    else
+      die "Duplicate DHCP IPs detected. Rerun with --static-network and unique IPs."
+    fi
+  fi
+else
+  if [[ "${CONTROL_PLANE_SSH_HOST}" == "${WORKER1_SSH_HOST}" ]]; then
+    if [[ "${SKIP_BOOTSTRAP}" -eq 1 || "${STATIC_NETWORK}" -eq 1 ]]; then
+      log "WARNING: Duplicate DHCP IPs detected (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}). Continuing (--static-network will assign unique IPs)."
+    else
+      die "Duplicate DHCP IPs detected (${CONTROL_PLANE_SSH_HOST}, ${WORKER1_SSH_HOST}). Rerun with --static-network and unique IPs."
+    fi
   fi
 fi
 
@@ -756,16 +785,16 @@ if [[ "${SKIP_BOOTSTRAP}" -eq 1 ]]; then
   log "Step 4/4: Bootstrap skipped (--skip-bootstrap)"
   echo "control-plane (${CONTROL_PLANE_NAME}) IP: ${CONTROL_PLANE_SSH_HOST}"
   echo "worker-1 (${WORKER1_NAME}) IP: ${WORKER1_SSH_HOST}"
-  echo "worker-2 (${WORKER2_NAME}) IP: ${WORKER2_SSH_HOST}"
-  echo "worker-3 (${WORKER3_NAME}) IP: ${WORKER3_SSH_HOST}"
   exit 0
 fi
 
 if [[ "${STATIC_NETWORK}" -eq 0 ]]; then
   CONTROL_PLANE_IP="${CONTROL_PLANE_SSH_HOST}"
   WORKER1_IP="${WORKER1_SSH_HOST}"
-  WORKER2_IP="${WORKER2_SSH_HOST}"
-  WORKER3_IP="${WORKER3_SSH_HOST}"
+  if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+    WORKER2_IP="${WORKER2_SSH_HOST}"
+    WORKER3_IP="${WORKER3_SSH_HOST}"
+  fi
 fi
 
 BOOTSTRAP_CONFIG="${RUNTIME_DIR}/3node-bootstrap.env"
@@ -788,13 +817,14 @@ write_env_var "${BOOTSTRAP_CONFIG}" WORKER1_SSH_HOST "${WORKER1_SSH_HOST}"
 write_env_var "${BOOTSTRAP_CONFIG}" WORKER1_HOSTNAME "${WORKER1_NAME}"
 write_env_var "${BOOTSTRAP_CONFIG}" WORKER1_IP "${WORKER1_IP}"
 
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_SSH_HOST "${WORKER2_SSH_HOST}"
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_HOSTNAME "${WORKER2_NAME}"
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_IP "${WORKER2_IP}"
-
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_SSH_HOST "${WORKER3_SSH_HOST}"
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_HOSTNAME "${WORKER3_NAME}"
-write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_IP "${WORKER3_IP}"
+if [[ "${SINGLE_WORKER}" -eq 0 ]]; then
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_SSH_HOST "${WORKER2_SSH_HOST}"
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_HOSTNAME "${WORKER2_NAME}"
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER2_IP "${WORKER2_IP}"
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_SSH_HOST "${WORKER3_SSH_HOST}"
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_HOSTNAME "${WORKER3_NAME}"
+  write_env_var "${BOOTSTRAP_CONFIG}" WORKER3_IP "${WORKER3_IP}"
+fi
 
 write_env_var "${BOOTSTRAP_CONFIG}" NETWORK_CIDR_PREFIX "${NETWORK_CIDR_PREFIX}"
 write_env_var "${BOOTSTRAP_CONFIG}" GATEWAY "${GATEWAY}"
@@ -814,15 +844,15 @@ write_env_var "${BOOTSTRAP_CONFIG}" INGRESS_LB_IP "${INGRESS_LB_IP}"
 write_env_var "${BOOTSTRAP_CONFIG}" METALLB_MANIFEST "${METALLB_MANIFEST}"
 write_env_var "${BOOTSTRAP_CONFIG}" INGRESS_MANIFEST "${INGRESS_MANIFEST}"
 
-log "Step 4/4: Bootstrapping cluster (control-plane + worker1/2/3)"
+if [[ "${SINGLE_WORKER}" -eq 1 ]]; then
+  log "Step 4/4: Bootstrapping cluster (control-plane + worker1 / single-worker mode)"
+else
+  log "Step 4/4: Bootstrapping cluster (control-plane + worker1/2/3)"
+fi
 bash "${ROOT_DIR}/scripts/bootstrap_3node_k8s_ova.sh" --config "${BOOTSTRAP_CONFIG}"
 
 log "Provisioning completed."
 echo "control-plane VMX: ${CONTROL_PLANE_VMX_WSL}"
 echo "worker-1 VMX: ${WORKER1_VMX_WSL}"
-echo "worker-2 VMX: ${WORKER2_VMX_WSL}"
-echo "worker-3 VMX: ${WORKER3_VMX_WSL}"
 echo "control-plane IP: ${CONTROL_PLANE_IP}"
 echo "worker-1 IP: ${WORKER1_IP}"
-echo "worker-2 IP: ${WORKER2_IP}"
-echo "worker-3 IP: ${WORKER3_IP}"

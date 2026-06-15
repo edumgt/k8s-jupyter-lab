@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: data-platform-dev
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - local-pv.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/environment: dev
+      app.kubernetes.io/topology: one-node
+
+patches:
+  - path: platform-configmap-patch.yaml
+  - path: platform-secrets-patch.yaml
+  - path: backend-clusterrolebinding-patch.yaml
+  - path: jupyter-pvc-patch.yaml
+
+patchesStrategicMerge:
+  - node-placement-patch.yaml
