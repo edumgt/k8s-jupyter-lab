@@ -1,0 +1,15 @@
+# BEGIN JUPYTER_DYNAMIC_ROUTES
+# Auto-generated. Do not edit manually.
+192.168.56.240 jupyter.local
+192.168.56.240 lab-test1-test-com-c31ddeb0.jupyter.local
+# END JUPYTER_DYNAMIC_ROUTES
+# BEGIN DATAXFLOW_LOCAL
+192.168.56.240 dataxflow.local api.dataxflow.local airflow.dataxflow.local
+# END DATAXFLOW_LOCAL
+# Added by Docker Desktop
+192.168.45.51 host.docker.internal
+192.168.45.51 gateway.docker.internal
+# To allow the same kube context to work on the host and the container:
+127.0.0.1 kubernetes.docker.internal
+# End of section
+192.168.253.240 dev.platform.local dev-api.platform.local www.platform.local api.platform.local platform.local jupyter.platform.local
