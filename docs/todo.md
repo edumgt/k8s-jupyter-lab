@@ -7,7 +7,7 @@
 - [ ] PC 재기동 후 `scripts/vmware_post_reboot_verify.sh`로 복원/접속/clone 재확인
 - [ ] FE/BE/Jupyter/GitLab/Nexus 핵심 시나리오 스모크 테스트
 - [ ] `ovabuild.sh`로 OVA 3개 export 및 산출물(sha256) 점검
-- [ ] `README.md`, `docs/vmware/README.md`, `CHECKLIST.md` 동기화
+- [ ] `README.md`, `docs/vmware/README.md`, `docs/checklist.md` 동기화
 
 ## P1 - 오프라인 개발성 강화
 

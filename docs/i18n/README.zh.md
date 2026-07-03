@@ -1,6 +1,6 @@
 # k8s-jupyter — 内网隔离（Air-gap）AI Agent 平台（VMware OVA）
 
-🌐 [English](README.en.md) | **中文** | [日本語](README.ja.md) | [한국어](README.md)
+🌐 [English](README.en.md) | **中文** | [日本語](README.ja.md) | [한국어](../../README.md)
 
 将虚拟机以 VMware OVA 形式移植到客户**内网隔离（air-gap）**环境，
 用于构建**基于 GPU 的本地 LLM + AI Agent 开发/运维平台**的自动化仓库。

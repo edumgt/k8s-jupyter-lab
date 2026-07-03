@@ -167,37 +167,37 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/../README.en.md"
+    source      = "${path.root}/../docs/i18n/README.en.md"
     destination = "/tmp/k8s-data-platform-src/README.en.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../README.ja.md"
+    source      = "${path.root}/../docs/i18n/README.ja.md"
     destination = "/tmp/k8s-data-platform-src/README.ja.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../README.zh.md"
+    source      = "${path.root}/../docs/i18n/README.zh.md"
     destination = "/tmp/k8s-data-platform-src/README.zh.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../TEST.md"
+    source      = "${path.root}/../docs/archive/TEST.md"
     destination = "/tmp/k8s-data-platform-src/TEST.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../TEST.en.md"
+    source      = "${path.root}/../docs/archive/TEST.en.md"
     destination = "/tmp/k8s-data-platform-src/TEST.en.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../TEST.ja.md"
+    source      = "${path.root}/../docs/archive/TEST.ja.md"
     destination = "/tmp/k8s-data-platform-src/TEST.ja.md"
   }
 
   provisioner "file" {
-    source      = "${path.root}/../TEST.zh.md"
+    source      = "${path.root}/../docs/archive/TEST.zh.md"
     destination = "/tmp/k8s-data-platform-src/TEST.zh.md"
   }
 
@@ -212,7 +212,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/../CHECK.md"
+    source      = "${path.root}/../docs/check.md"
     destination = "/tmp/k8s-data-platform-src/CHECK.md"
   }
 

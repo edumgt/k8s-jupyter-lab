@@ -368,6 +368,7 @@ sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
 | `docs/phase-1-build-ova.md` | OVA 빌드 (온라인) |
 | `docs/phase-2-ova-solution-ops.md` | OVA 기동 후 운영 준비 |
 | `docs/phase-3-install-airgap-from-ova.md` | 폐쇄망 설치 |
-| `CHECKLIST.md` | 빌드·배포·리허설 체크리스트 |
+| `docs/checklist.md` | 빌드·배포·리허설 체크리스트 |
 | `PORTS.md` | 포트 목록 |
 | `CHANGELOG.md` | 변경 이력 |
+| `docs/docs-map.md` | 전체 문서 인덱스 |
