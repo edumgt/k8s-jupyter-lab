@@ -1,355 +1,374 @@
-# k8s-data-platform-ova
+# k8s-jupyter — Air-gap AI Agent Platform (VMware OVA)
 
 🌐 **English** | [中文](README.zh.md) | [日本語](README.ja.md) | [한국어](README.md)
 
-This repository provides a practice/production platform built on the `Ubuntu 24 OVA → kubeadm single-node Kubernetes → platform workloads` stack. The runtime is **not** Docker Compose — it uses `Kubernetes manifest + kustomize overlay + kubeadm/bootstrap`. The OVA is pre-loaded with Docker Engine, containerd, kubeadm, kubelet, kubectl, vim, curl, Node.js, Python, image caches, and an offline bundle.
+An automation repository for building a **GPU-based Local LLM + AI Agent development/operations platform** by porting VMs as VMware OVAs into a customer's **air-gapped** environment.
 
-This README also highlights the following operational perspectives on top of the Kubernetes-focused description:
+---
 
-- End-to-end workflow for testing immediately after OVA import into VirtualBox / VMware
-- Service access patterns in air-gapped (offline) environments
-- Frontend development environment (`code-server`, `Vite`, `npm offline`) usage
-- Offline bundle import / validation checklist
+## Tech Stack
 
-Key requirements implemented:
+### Platform / Infrastructure
 
-- Per-user JupyterLab sessions created as Kubernetes Pod/Service
-- Per-user workspace persisted via `PVC subPath`
-- Workspace snapshotted into a Harbor image via Kaniko Job
-- Snapshot image restored on next login
-- Platform common images pulled from `docker.io/edumgt/*`
-- OVA pre-loaded with Docker Engine, utilities, platform images, and offline library bundles
+- `VMware OVA`
+- `Ubuntu 24.04`
+- `Kubernetes`
+- `containerd`
+- `NVIDIA GPU / CUDA`
+- `Harbor`, `Nexus`, `GitLab`, `NAS (OpenMediaVault)`
 
-## Kubernetes Architecture
+### AI / Development Stack
 
-The current stack is pure Kubernetes.
+- `Ollama`, `vLLM`, `TGI`
+- `JupyterHub`
+- `LangGraph`, `AutoGen`
+- `Chroma`, `Milvus`
 
-- Host runtime: `Ubuntu 24`
-- Cluster: `kubeadm`-based single-node Kubernetes
-- Deployment: `infra/k8s/base` + `infra/k8s/overlays/dev|prod`
-- Workloads: `backend`, `frontend`, `mongodb`, `redis`, `airflow (optional)`, `jupyter`, `gitlab`, `gitlab-runner`, `nexus`
-- User Jupyter sessions: backend creates per-user Pod/Service via Kubernetes API
+### Local Development Toolchain
 
-## Directory Layout
+- `Visual Studio Code`
+- Local LLM inference via `Ollama`
+- Local coding agent combining `Codex CLI` + `Ollama (--oss)`
+- Local coding agent combining `Claude Code` + `Ollama`
+- `Node.js / npm`, `Git for Windows`
+- Optional: a custom local agent sidebar as a `VSCode Extension`
+
+### Offline (Air-gap) Development Principles
+
+- Even without internet access, `Ollama` with pre-downloaded models can write code, refactor, explain code, and draft tests
+- `Codex CLI` and `Claude Code` can be configured to read/modify files and run commands against the local working directory
+- Web search, up-to-date documentation lookup, installing new packages, and remote Git integration are limited without internet access or an internal mirror
+- Before bringing assets into the air-gapped network, it is recommended to pre-bundle `models`, `pip/npm/apt dependencies`, `documentation`, and `example code`
+- For agent work on large codebases, a larger context window is advantageous, so raising the `Ollama` context length is recommended
+
+### Windows Local Development Helper Script
+
+- [setup-windows-ollama-dev.ps1](/home/ubuntu/k8s-jupyter/setup-windows-ollama-dev.ps1)
+- Purpose: automates `Codex CLI`, `Claude Code`, local model pulls, and VSCode integration checks in a `Windows + VSCode + Ollama + local GPU` environment
+
+### VS Code Local Agent Extension
+
+- [tools/vscode-local-agent/README.md](/home/ubuntu/k8s-jupyter/tools/vscode-local-agent/README.md)
+- Purpose: adds a `Local Agent` icon to the VS Code Activity Bar, providing a sidebar chat panel that calls Windows Ollama (`http://172.29.32.1:11434`) from WSL
+- Run: from the root workspace, press `F5` or use `Run and Debug > Run Local Ollama Agent Extension`
+
+---
+
+## Architecture Diagrams
+
+### 1. Overall Delivery Pipeline
+
+```mermaid
+graph LR
+    subgraph BUILD["Online Build Environment"]
+        ISO["Ubuntu 24.04 ISO"] --> PACKER["Packer Build"]
+        PACKER --> ANSIBLE["Ansible Provisioning"]
+        ANSIBLE --> OVF["OVA files x8"]
+        ANSIBLE --> BUNDLE["Offline Bundle"]
+    end
+
+    OVF --> MEDIA["Transfer Media USB/HDD"]
+    BUNDLE --> MEDIA
+
+    subgraph AIRGAP["Customer Air-gapped Network"]
+        INFRA["Infra VM Deployment\nHarbor, Nexus, GitLab, NAS"]
+        K8S_VM["Kubernetes Deployment\nCP + Worker x3"]
+        PLATFORM["AI Platform Operations"]
+        GPU_WL["GPU Workloads\nLLM, AI Agent, Jupyter"]
+        INFRA --> PLATFORM
+        K8S_VM --> PLATFORM
+        PLATFORM --> GPU_WL
+    end
+
+    MEDIA --> INFRA
+    MEDIA --> K8S_VM
+```
+
+---
+
+### 2. Customer Air-gapped VM Layout (8 VMs)
+
+```mermaid
+graph TB
+    subgraph INFRA_VMS["Infra VMs"]
+        HARBOR["harbor-32\nHarbor Registry\n:80, :443"]
+        NEXUS["nexus-31\nNexus Repository\n:8081"]
+        GITLAB["gitlab-33\nGitLab\n:80, :443, :22"]
+        NAS["nas-omv\nNAS OpenMediaVault\nNFS, SMB"]
+    end
+
+    subgraph K8S_CLUSTER["Kubernetes Cluster"]
+        CP["cp Control Plane\nkube-apiserver :6443\netcd :2379-2380"]
+
+        subgraph WORKERS["Worker Nodes GPU"]
+            W1["w1 worker-1\nGPU, kubelet, containerd"]
+            W2["w2 worker-2\nGPU, kubelet, containerd"]
+            W3["w3 worker-3\nGPU, kubelet, containerd"]
+        end
+
+        subgraph K8S_STACK["K8s Platform Stack"]
+            MLB["MetalLB L2 LB"]
+            NGINX["ingress-nginx\n:80, :443"]
+            METRICS["metrics-server"]
+            HEADLAMP["Headlamp Dashboard"]
+        end
+    end
+
+    subgraph AI_WL["AI Workloads"]
+        LLM["Local LLM\nOllama, vLLM, TGI"]
+        JUPYTER["JupyterHub\nDev Environment"]
+        AGENT["AI Agent\nLangGraph, AutoGen"]
+    end
+
+    NAS -->|"NFS PV"| CP
+    HARBOR -->|"image pull"| CP
+    NEXUS -->|"packages"| CP
+    GITLAB -->|"CI/CD"| CP
+    CP --> W1
+    CP --> W2
+    CP --> W3
+    HEADLAMP --> LLM
+    MLB --> NGINX
+    NGINX --> JUPYTER
+    LLM -->|"API"| AGENT
+    AGENT --> JUPYTER
+```
+
+---
+
+### 3. GPU Passthrough Architecture
+
+```mermaid
+graph TB
+    subgraph HOST["VMware Workstation Host Windows"]
+        GPU_HW["Physical GPU NVIDIA"]
+        VMWARE["VMware Hypervisor"]
+        GPU_HW -->|"PCIe Passthrough or vGPU"| VMWARE
+    end
+
+    subgraph VM_WORKER["Worker VM Ubuntu 24.04"]
+        GPU_DEV["NVIDIA Driver\nnvidia device"]
+        CONTAINERD["containerd\nnvidia-container-runtime"]
+        GPU_DEV --> CONTAINERD
+    end
+
+    subgraph POD["Kubernetes Pod"]
+        CUDA["CUDA Context"]
+        LLM_ENGINE["LLM Inference Engine\nvLLM, Ollama"]
+        CUDA --> LLM_ENGINE
+    end
+
+    VMWARE --> GPU_DEV
+    CONTAINERD -->|"gpu resource limit"| CUDA
+```
+
+---
+
+### 4. AI Agent Development Workflow
+
+```mermaid
+graph LR
+    BROWSER["Developer\nBrowser"]
+
+    subgraph PLATFORM["AI Platform K8s"]
+        JUPYTER_SVC["JupyterHub :443"]
+        AGENT_SVC["AI Agent Service\nREST API"]
+        LLM_SVC["Local LLM\nOllama :11434\nvLLM :8000"]
+        VECTOR_DB["Vector DB\nChroma, Milvus"]
+    end
+
+    subgraph STORAGE["NAS Storage"]
+        MODEL_STORE["LLM Model Files\nGGUF, Safetensors"]
+        DATA_STORE["Training / RAG Data"]
+    end
+
+    subgraph REGISTRY["Registries"]
+        HARBOR_REG["Harbor\nAI Container Images"]
+        NEXUS_REG["Nexus\npip Package Mirror"]
+    end
+
+    BROWSER -->|"HTTPS"| JUPYTER_SVC
+    BROWSER -->|"HTTPS"| AGENT_SVC
+    JUPYTER_SVC -->|"LLM API"| LLM_SVC
+    AGENT_SVC -->|"LLM API"| LLM_SVC
+    AGENT_SVC -->|"RAG search"| VECTOR_DB
+    LLM_SVC -->|"load model"| MODEL_STORE
+    VECTOR_DB --- DATA_STORE
+    HARBOR_REG -->|"image pull"| JUPYTER_SVC
+    NEXUS_REG -->|"pip install"| JUPYTER_SVC
+```
+
+---
+
+### 5. OVA Build Details (Packer)
+
+```mermaid
+graph TD
+    VARS["variables.vmware.pkrvars.hcl"]
+    ISO_FILE["Ubuntu 24.04 ISO local"]
+
+    subgraph PACKER_BUILD["Packer Build vmware-iso"]
+        CLOUD_INIT["cloud-init autoinstall\nHTTP nocloud"]
+        FILE_COPY["File Provisioner\nscripts, docs, manifests"]
+        APT_INST["apt install\nansible, open-vm-tools"]
+        PLAYBOOK["ansible-playbook\nplaybook-proof.yml"]
+        CLOUD_INIT --> FILE_COPY --> APT_INST --> PLAYBOOK
+    end
+
+    VARS --> CLOUD_INIT
+    ISO_FILE --> CLOUD_INIT
+    PLAYBOOK --> VMX["vmx build output"]
+
+    VMX -->|"ovftool"| OVA_K8S["k8s OVA x4\ncp, worker-1, worker-2, worker-3"]
+    VMX -->|"ovftool"| OVA_SVC["service OVA x4\nnexus, harbor, gitlab, nas-omv"]
+    OVA_K8S --> SHA["SHA256SUMS.txt"]
+    OVA_SVC --> SHA
+```
+
+---
+
+### 6. Offline Bundle Import Flow
+
+```mermaid
+graph LR
+    subgraph BUNDLE["offline-bundle directory"]
+        IMGS["images tar\ncontainer images"]
+        MFST["manifests yaml\nK8s resource definitions"]
+        APT_PKG["apt-bundle\ndeb packages"]
+        MODELS["models\nLLM model files"]
+    end
+
+    IMGS -->|"ctr images import"| CTR["containerd\nk8s.io namespace"]
+    MFST -->|"kubectl apply -f"| KUBE_API["Kubernetes API"]
+    APT_PKG -->|"dpkg -i"| OS_PKG["OS packages\nNVIDIA driver"]
+    MODELS -->|"NFS PV"| LLM_POD["LLM Pod\nload model"]
+
+    CTR --> PODS["Pod image serving"]
+    KUBE_API --> SVCS["Service, Ingress\ncreated"]
+```
+
+---
+
+## VM Inventory
+
+| VM | Role | Key Services | Ports |
+| ---- | ------ | ---------- | ------ |
+| `cp` | Kubernetes Control Plane | kube-apiserver, etcd, scheduler | 6443, 2379-2380 |
+| `w1` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `w2` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `w3` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `nexus-31` | Nexus Repository | apt mirror, pip mirror, helm chart | 8081 |
+| `harbor-32` | Harbor Registry | Container image registry | 80, 443 |
+| `nas-omv` | NAS (OpenMediaVault) | NFS, SMB shared storage | 2049(NFS) |
+| `gitlab-33` | GitLab | Source control, CI/CD | 80, 443, 22 |
+
+---
+
+## Key Directories
 
 ```text
 .
-├── apps/
-│   ├── airflow/          # Airflow image + DAG
-│   ├── backend/          # FastAPI API + k8s session/snapshot control
-│   ├── frontend/         # Quasar(Vue 3) dashboard
-│   └── jupyter/          # JupyterLab image + bootstrap workspace
-├── ansible/              # OVA guest provisioning, Docker/Kubernetes/bootstrap
-├── infra/
-│   ├── harbor/           # Harbor snapshot integration notes
-│   └── k8s/              # base manifests + dev/prod overlays + runner overlay
-├── packer/               # Ubuntu 24 OVA template
-└── scripts/              # build/publish/apply/offline helper scripts
+├── packer/         # VM/OVA image build definitions (vmware-iso)
+├── scripts/        # VM networking, install, import, verification automation
+└── docs/           # Phase-by-phase operations documentation
 ```
 
-## Architecture Flowchart
-
-```mermaid
-flowchart TD
-  A["WSL / Build Host"] --> B["Packer"]
-  B --> C["Ubuntu 24 OVA"]
-  C --> D["Ansible Provisioning"]
-  D --> E["Container Runtime + Kubernetes Tools"]
-  E --> F["Kubernetes Single Node (Control Plane)"]
-
-  F --> G["Frontend (NodePort 30080)"]
-  F --> H["Backend API (NodePort 30081)"]
-  F --> I["Shared Jupyter (NodePort 30088)"]
-  F --> J["GitLab (NodePort 30089)"]
-  F --> K["Airflow (NodePort 30090, Optional)"]
-  F --> T["Nexus (NodePort 30091)"]
-  F --> U["Harbor (NodePort 30092)"]
-  F --> V["code-server (NodePort 30100)"]
-  F --> W["Vite Dev Server (NodePort 31080)"]
-  F --> L["MongoDB + Redis + PVC"]
-
-  H --> M["Session Manager"]
-  M --> N["User Jupyter Pod"]
-  N --> O["PVC (users/session-id)"]
-  O --> P["Kaniko Snapshot Job"]
-  P --> Q["Harbor Snapshot Image"]
-  Q --> M
-
-  R["docker.io/edumgt Images"] --> F
-  S["Offline Bundle (/opt/k8s-data-platform)"] --> F
-
-  V --> X["Frontend Source (/opt/k8s-data-platform/apps/frontend)"]
-  X --> W
-  T --> X
-```
-
-## Jupyter Snapshot Sequence
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant FE as Frontend
-  participant BE as Backend API
-  participant K8S as Kubernetes
-  participant PVC as Persistent Volume
-  participant HARBOR as Harbor Registry
-
-  U->>FE: Start Lab
-  FE->>BE: POST /sessions
-  BE->>BE: Resolve session-id / image / workspace
-  BE->>BE: Check existing snapshot
-  BE->>K8S: Create Pod + NodePort Service
-  K8S->>PVC: Mount users/session-id
-  K8S->>PVC: Init container seeds workspace (if empty)
-  FE->>BE: GET /sessions/{user}
-  BE-->>FE: Ready (NodePort, Image, Workspace)
-  FE-->>U: Open JupyterLab
-
-  U->>FE: Publish Snapshot
-  FE->>BE: POST /snapshots
-  BE->>K8S: Create Kaniko Job
-  K8S->>PVC: Read workspace
-  K8S->>HARBOR: Push image (jupyter-user-session-id:latest)
-  FE->>BE: GET /snapshots/{user}
-  BE-->>FE: Snapshot Status
-
-  U->>FE: Next Login
-  FE->>BE: POST /sessions
-  BE->>HARBOR: Select latest snapshot image
-  BE->>K8S: Recreate Pod with snapshot image
-  K8S->>PVC: Reuse users/session-id
-  FE-->>U: Restored Lab Environment
-```
+---
 
 ## Quick Start
 
-### 1. Prepare OVA variables
-
 ```bash
-cp packer/variables.pkr.hcl.example packer/variables.pkr.hcl
+# Phase 1: Build OVA (online environment)
+bash scripts/phase1_build_ova_assets.sh all
+
+# Phase 2: Prepare air-gap operations after booting the OVA
+bash scripts/phase2_operate_airgap_cluster.sh all
+
+# Phase 3: Install in the air-gapped network
+bash scripts/phase3_install_from_completed_ova.sh full
+
+# Check status
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
 ```
-
-### 2. Build OVA
-
-```bash
-bash scripts/run_wsl.sh --skip-export
-```
-
-To include OVA export in one shot:
-
-```bash
-bash scripts/run_wsl.sh
-```
-
-### 3. Docker Hub mirror + local Kubernetes runtime import
-
-```bash
-bash scripts/build_k8s_images.sh --namespace edumgt --tag latest
-```
-
-To push to Docker Hub:
-
-```bash
-docker login
-bash scripts/publish_dockerhub.sh --namespace edumgt --tag latest
-```
-
-### 4. Apply Kubernetes
-
-```bash
-bash scripts/apply_k8s.sh --env dev
-```
-
-Reset and re-apply:
-
-```bash
-bash scripts/reset_k8s.sh --env dev
-bash scripts/apply_k8s.sh --env dev
-```
-
-Check status:
-
-```bash
-bash scripts/status_k8s.sh --env dev
-```
-
-### 5. GitLab Runner overlay
-
-```bash
-bash scripts/apply_k8s.sh --env dev --with-runner
-kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
-```
-
-### 6. Nexus Offline Repository
-
-```bash
-bash scripts/apply_k8s.sh --env dev
-bash scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://127.0.0.1:30091
-```
-
-## Post-OVA-Import Testing
-
-VMware-specific procedure: [docs/vmware/README.md](docs/vmware/README.md)
-
-### Recommended VM Specs
-
-- CPU: 4 cores or more
-- Memory: 16 GB or more
-- Disk: 100 GB or more
-- NIC: `Bridged Adapter` recommended
-
-### Web Access
-
-- Frontend: `http://<OVA_IP>:30080`
-- Backend: `http://<OVA_IP>:30081`
-- Jupyter: `http://<OVA_IP>:30088`
-- GitLab: `http://<OVA_IP>:30089`
-- Nexus: `http://<OVA_IP>:30091`
-- Harbor: `http://<OVA_IP>:30092`
-- code-server: `http://<OVA_IP>:30100`
-- Frontend Dev: `http://<OVA_IP>:31080`
-
-## Frontend / API
-
-- Login accounts
-  - user: `test1@test.com / 123456`
-  - user: `test2@test.com / 123456`
-  - admin: `admin@test.com / 123456`
-- Regular users start/stop/restore only their own Jupyter sandbox
-- Admins view per-user sandbox status, session time, cumulative usage, login count, and launch count in admin mode
-- Backend API endpoints:
-  - `POST /api/auth/login`
-  - `GET /api/auth/me`
-  - `POST /api/auth/logout`
-  - `POST /api/jupyter/sessions`
-  - `GET /api/jupyter/sessions/{username}`
-  - `DELETE /api/jupyter/sessions/{username}`
-  - `GET /api/jupyter/snapshots/{username}`
-  - `POST /api/jupyter/snapshots`
-  - `GET /api/admin/sandboxes`
-
-## Frontend Development Environment
-
-This OVA provides not only the production frontend but also a **Vue development environment inside an air-gapped network**.
-
-- Production Frontend: Kubernetes NodePort `30080`
-- Dev Frontend: Vite dev server `31080`
-- IDE: `code-server` `30100`
-- Package supply: Nexus npm registry + offline npm cache
-
-### Access code-server
-
-```text
-http://<OVA_IP>:30100
-```
-
-Then open:
-
-```text
-/opt/k8s-data-platform/apps/frontend
-```
-
-### Install dependencies
-
-```bash
-bash /opt/k8s-data-platform/scripts/frontend_dev_setup.sh
-```
-
-### Start dev server
-
-```bash
-bash /opt/k8s-data-platform/scripts/run_frontend_dev.sh
-```
-
-Open browser: `http://<OVA_IP>:31080`
-
-## Offline / Air-gap Strategy
-
-1. Boot base cluster with preloaded OVA images and tools
-2. Import required images/packages from `offline-bundle`
-3. Serve Python / npm package caches via Nexus
-4. Use Harbor only as a per-user snapshot registry
-5. All external access via `NodePort`
-
-```bash
-bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle
-bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
-```
-
-## Key NodePorts
-
-| Service | NodePort |
-|---|---|
-| Frontend | 30080 |
-| Backend API | 30081 |
-| JupyterLab | 30088 |
-| GitLab Web | 30089 |
-| Airflow | 30090 |
-| Nexus | 30091 |
-| Harbor | 30092 |
-| code-server | 30100 |
-| Frontend Dev (Vite) | 31080 |
-| GitLab SSH | 30224 |
-
-## Image Strategy
-
-- `docker.io/edumgt/k8s-data-platform-backend:latest`
-- `docker.io/edumgt/k8s-data-platform-frontend:latest`
-- `docker.io/edumgt/k8s-data-platform-airflow:latest`
-- `docker.io/edumgt/k8s-data-platform-jupyter:latest`
-
-Harbor is used **only** as a per-user Jupyter snapshot registry, not as a general image registry.
-
-## VirtualBox Multi-node Expansion
-
-Automatically create/join/distribute 3 worker VMs from an existing control-plane VM:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_virtualbox_multinode.ps1 `
-  -ControlPlaneVmName k8s-data-platform `
-  -WorkerNamePrefix k8s-worker `
-  -WorkerCount 3 `
-  -Username ubuntu `
-  -Password ubuntu `
-  -ForceRecreateWorkers
-```
-
-Multi-node overlay path: `infra/k8s/overlays/dev-multinode`
-
-```bash
-bash scripts/apply_k8s.sh --env dev --overlay dev-multinode
-```
-
-## GitHub Actions
-
-- Workflow: `.github/workflows/publish-images.yml`
-- Required secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
-
-## OVA Validation (2026-03-18)
-
-- VM console capture: `docs/screenshots/ova-proof-vm-console.png`
-- Full validation log: [docs/ova-proof-20260318.md](docs/ova-proof-20260318.md)
-
-Known gap: `nexus` pod image pull failed for `docker.io/edumgt/platform-nexus3:3.90.1-alpine`.
 
 ---
 
-![Architecture Overview](docs/screenshots/architecture-overview.png)
+## Installation Procedure (OVA-based)
+
+### 1. Prerequisites
+
+- 8 OVA files (cp, w1~3, nexus, harbor, gitlab, nas-omv)
+- Offline bundle (`images/*.tar`, `manifests/`, `apt-bundle/`, `models/`)
+
+### 2. Basic VM Setup (each node)
+
+```bash
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+sudo bash scripts/set_hostname_hosts.sh --hostname <HOSTNAME> --entry "<IP> <HOSTNAME>"
+```
+
+### 3. Import Offline Bundle
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --apply
+```
+
+### 4. Post-install Checks
+
+```bash
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
+kubectl get nodes -o wide
+kubectl get pods -A
+```
+
+### 5. Rebuild OVA (if needed)
+
+```bash
+bash ovabuild.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl --dist-dir C:/ffmpeg
+```
 
 ---
 
-## 💖 Sponsor
+## Troubleshooting
 
-If this project has been helpful, please consider sponsoring to support continued development.
+### Kubernetes Basic Status
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-pink?logo=github)](https://github.com/sponsors/edumgt)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/edumgt)
+```bash
+bash scripts/status_k8s.sh
+kubectl get nodes -o wide && kubectl get pods -A
+```
 
-Sponsorship funds are used for:
+### containerd / kubelet Issues
 
-- Cloud infrastructure costs (CI/CD, image registry, test environments)
-- New feature development and maintenance
-- Documentation improvements and multilingual support
-- Educational content and tutorial creation
+```bash
+sudo systemctl restart containerd kubelet
+sudo systemctl status containerd kubelet --no-pager
+```
 
-> Thank you! Your support keeps this project growing.
+### Offline Image Import Failure
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --runtime-only
+```
+
+### VM Network Issues
+
+```bash
+ip a && ip route && cat /etc/hosts
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+```
+
+---
+
+## Documentation Map
+
+| Document | Content |
+| ------ | ------ |
+| `docs/phase-1-build-ova.md` | OVA build (online) |
+| `docs/phase-2-ova-solution-ops.md` | Operations prep after booting OVA |
+| `docs/phase-3-install-airgap-from-ova.md` | Air-gapped installation |
+| `CHECKLIST.md` | Build/deploy/rehearsal checklist |
+| `PORTS.md` | Port list |
+| `CHANGELOG.md` | Change history |

@@ -1,343 +1,375 @@
-# k8s-data-platform-ova
+# k8s-jupyter — 内网隔离（Air-gap）AI Agent 平台（VMware OVA）
 
 🌐 [English](README.en.md) | **中文** | [日本語](README.ja.md) | [한국어](README.md)
 
-本仓库提供一个基于 `Ubuntu 24 OVA → kubeadm 单节点 Kubernetes → 平台工作负载` 架构的实验/生产平台。运行基准**不是** Docker Compose，而是 `Kubernetes manifest + kustomize overlay + kubeadm/bootstrap`。OVA 内预置了 Docker Engine、containerd、kubeadm、kubelet、kubectl、vim、curl、Node.js、Python、镜像缓存以及离线包。
+将虚拟机以 VMware OVA 形式移植到客户**内网隔离（air-gap）**环境，
+用于构建**基于 GPU 的本地 LLM + AI Agent 开发/运维平台**的自动化仓库。
 
-本 README 在 Kubernetes 核心说明基础上，还着重介绍以下运维视角：
+---
 
-- OVA 导入 VirtualBox / VMware 后即可测试的完整流程
-- 隔离网络（离线）环境的服务访问方式
-- Frontend 开发环境（`code-server`、`Vite`、`npm offline`）使用步骤
-- 离线包导入 / 验证清单
+## 技术栈
 
-核心需求实现：
+### 平台/基础设施
 
-- 每用户 JupyterLab 会话以 Kubernetes Pod/Service 形式创建
-- 每用户工作区通过 `PVC subPath` 持久化
-- 工作区通过 Kaniko Job 快照为 Harbor 镜像
-- 下次登录时优先使用 Harbor 快照镜像恢复
-- 平台公共镜像从 `docker.io/edumgt/*` 拉取
-- OVA 内预置 Docker Engine、工具、平台镜像及离线库包
+- `VMware OVA`
+- `Ubuntu 24.04`
+- `Kubernetes`
+- `containerd`
+- `NVIDIA GPU / CUDA`
+- `Harbor`, `Nexus`, `GitLab`, `NAS (OpenMediaVault)`
 
-## Kubernetes 架构
+### AI/开发栈
 
-当前技术栈为纯 Kubernetes。
+- `Ollama`, `vLLM`, `TGI`
+- `JupyterHub`
+- `LangGraph`, `AutoGen`
+- `Chroma`, `Milvus`
 
-- 宿主运行时：`Ubuntu 24`
-- 集群：基于 `kubeadm` 的单节点 Kubernetes
-- 部署基准：`infra/k8s/base` + `infra/k8s/overlays/dev|prod`
-- 工作负载：`backend`、`frontend`、`mongodb`、`redis`、`airflow（可选）`、`jupyter`、`gitlab`、`gitlab-runner`、`nexus`
-- 用户 Jupyter 会话：backend 通过 Kubernetes API 为每个用户创建 Pod/Service
+### 本地开发工具链
 
-## 目录结构
+- `Visual Studio Code`
+- 基于 `Ollama` 的本地 LLM 推理
+- `Codex CLI` + `Ollama (--oss)` 组合的本地编码代理
+- `Claude Code` + `Ollama` 组合的本地编码代理
+- `Node.js / npm`, `Git for Windows`
+- 可选：以 `VSCode Extension` 形式提供的自定义本地代理侧边栏
+
+### 离线（air-gap）开发原则
+
+- 即使没有互联网，也可以使用预先下载好的 `Ollama` 模型进行代码编写、重构、说明和测试草稿生成
+- `Codex CLI` 与 `Claude Code` 可以基于本地工作目录构建文件读写/命令执行工作流
+- 网络搜索、最新文档查阅、新包安装、远程 Git 集成在没有互联网或企业内部镜像的情况下会受限
+- 建议在带入内网隔离环境前,预先打包好 `模型`、`pip/npm/apt 依赖`、`文档`、`示例代码`
+- 面向大型代码库的代理任务更适合较大的上下文,建议提高 `Ollama` 的上下文长度配置
+
+### Windows 本地开发辅助脚本
+
+- [setup-windows-ollama-dev.ps1](/home/ubuntu/k8s-jupyter/setup-windows-ollama-dev.ps1)
+- 目的：在 `Windows + VSCode + Ollama + 本地 GPU` 环境中自动化 `Codex CLI`、`Claude Code`、本地模型拉取、VSCode 集成检查
+
+### VS Code 本地代理扩展
+
+- [tools/vscode-local-agent/README.md](/home/ubuntu/k8s-jupyter/tools/vscode-local-agent/README.md)
+- 目的：在 VS Code 左侧 `Activity Bar` 添加 `Local Agent` 图标,提供从 WSL 调用 Windows Ollama（`http://172.29.32.1:11434`）的侧边栏聊天面板
+- 运行方式：在根工作区按 `F5`，或选择 `Run and Debug > Run Local Ollama Agent Extension`
+
+---
+
+## 架构图
+
+### 1. 整体交付流水线
+
+```mermaid
+graph LR
+    subgraph BUILD["在线构建环境"]
+        ISO["Ubuntu 24.04 ISO"] --> PACKER["Packer Build"]
+        PACKER --> ANSIBLE["Ansible 配置"]
+        ANSIBLE --> OVF["OVA 文件 x8"]
+        ANSIBLE --> BUNDLE["离线包"]
+    end
+
+    OVF --> MEDIA["转移介质 USB/HDD"]
+    BUNDLE --> MEDIA
+
+    subgraph AIRGAP["客户内网隔离环境"]
+        INFRA["基础设施 VM 部署\nHarbor, Nexus, GitLab, NAS"]
+        K8S_VM["Kubernetes 部署\nCP + Worker x3"]
+        PLATFORM["AI 平台运维"]
+        GPU_WL["GPU 工作负载\nLLM, AI Agent, Jupyter"]
+        INFRA --> PLATFORM
+        K8S_VM --> PLATFORM
+        PLATFORM --> GPU_WL
+    end
+
+    MEDIA --> INFRA
+    MEDIA --> K8S_VM
+```
+
+---
+
+### 2. 客户内网隔离环境 VM 组成（8台）
+
+```mermaid
+graph TB
+    subgraph INFRA_VMS["基础设施 VM"]
+        HARBOR["harbor-32\nHarbor 镜像仓库\n:80, :443"]
+        NEXUS["nexus-31\nNexus Repository\n:8081"]
+        GITLAB["gitlab-33\nGitLab\n:80, :443, :22"]
+        NAS["nas-omv\nNAS OpenMediaVault\nNFS, SMB"]
+    end
+
+    subgraph K8S_CLUSTER["Kubernetes Cluster"]
+        CP["cp Control Plane\nkube-apiserver :6443\netcd :2379-2380"]
+
+        subgraph WORKERS["Worker Nodes GPU"]
+            W1["w1 worker-1\nGPU, kubelet, containerd"]
+            W2["w2 worker-2\nGPU, kubelet, containerd"]
+            W3["w3 worker-3\nGPU, kubelet, containerd"]
+        end
+
+        subgraph K8S_STACK["K8s 平台栈"]
+            MLB["MetalLB L2 LB"]
+            NGINX["ingress-nginx\n:80, :443"]
+            METRICS["metrics-server"]
+            HEADLAMP["Headlamp Dashboard"]
+        end
+    end
+
+    subgraph AI_WL["AI 工作负载"]
+        LLM["Local LLM\nOllama, vLLM, TGI"]
+        JUPYTER["JupyterHub\n开发环境"]
+        AGENT["AI Agent\nLangGraph, AutoGen"]
+    end
+
+    NAS -->|"NFS PV"| CP
+    HARBOR -->|"镜像 pull"| CP
+    NEXUS -->|"软件包"| CP
+    GITLAB -->|"CI/CD"| CP
+    CP --> W1
+    CP --> W2
+    CP --> W3
+    HEADLAMP --> LLM
+    MLB --> NGINX
+    NGINX --> JUPYTER
+    LLM -->|"API"| AGENT
+    AGENT --> JUPYTER
+```
+
+---
+
+### 3. GPU 直通结构
+
+```mermaid
+graph TB
+    subgraph HOST["VMware Workstation Host Windows"]
+        GPU_HW["物理 GPU NVIDIA"]
+        VMWARE["VMware Hypervisor"]
+        GPU_HW -->|"PCIe Passthrough or vGPU"| VMWARE
+    end
+
+    subgraph VM_WORKER["Worker VM Ubuntu 24.04"]
+        GPU_DEV["NVIDIA Driver\nnvidia device"]
+        CONTAINERD["containerd\nnvidia-container-runtime"]
+        GPU_DEV --> CONTAINERD
+    end
+
+    subgraph POD["Kubernetes Pod"]
+        CUDA["CUDA Context"]
+        LLM_ENGINE["LLM 推理引擎\nvLLM, Ollama"]
+        CUDA --> LLM_ENGINE
+    end
+
+    VMWARE --> GPU_DEV
+    CONTAINERD -->|"gpu resource limit"| CUDA
+```
+
+---
+
+### 4. AI Agent 开发工作流
+
+```mermaid
+graph LR
+    BROWSER["开发者\n浏览器"]
+
+    subgraph PLATFORM["AI 平台 K8s"]
+        JUPYTER_SVC["JupyterHub :443"]
+        AGENT_SVC["AI Agent 服务\nREST API"]
+        LLM_SVC["Local LLM\nOllama :11434\nvLLM :8000"]
+        VECTOR_DB["Vector DB\nChroma, Milvus"]
+    end
+
+    subgraph STORAGE["NAS 存储"]
+        MODEL_STORE["LLM 模型文件\nGGUF, Safetensors"]
+        DATA_STORE["训练/RAG 数据"]
+    end
+
+    subgraph REGISTRY["镜像仓库"]
+        HARBOR_REG["Harbor\nAI 容器镜像"]
+        NEXUS_REG["Nexus\npip 包镜像"]
+    end
+
+    BROWSER -->|"HTTPS"| JUPYTER_SVC
+    BROWSER -->|"HTTPS"| AGENT_SVC
+    JUPYTER_SVC -->|"LLM API"| LLM_SVC
+    AGENT_SVC -->|"LLM API"| LLM_SVC
+    AGENT_SVC -->|"RAG 检索"| VECTOR_DB
+    LLM_SVC -->|"加载模型"| MODEL_STORE
+    VECTOR_DB --- DATA_STORE
+    HARBOR_REG -->|"镜像 pull"| JUPYTER_SVC
+    NEXUS_REG -->|"pip install"| JUPYTER_SVC
+```
+
+---
+
+### 5. OVA 构建详情（Packer）
+
+```mermaid
+graph TD
+    VARS["variables.vmware.pkrvars.hcl"]
+    ISO_FILE["Ubuntu 24.04 ISO local"]
+
+    subgraph PACKER_BUILD["Packer Build vmware-iso"]
+        CLOUD_INIT["cloud-init autoinstall\nHTTP nocloud"]
+        FILE_COPY["File Provisioner\nscripts, docs, manifests"]
+        APT_INST["apt install\nansible, open-vm-tools"]
+        PLAYBOOK["ansible-playbook\nplaybook-proof.yml"]
+        CLOUD_INIT --> FILE_COPY --> APT_INST --> PLAYBOOK
+    end
+
+    VARS --> CLOUD_INIT
+    ISO_FILE --> CLOUD_INIT
+    PLAYBOOK --> VMX["vmx 构建产物"]
+
+    VMX -->|"ovftool"| OVA_K8S["k8s OVA x4\ncp, worker-1, worker-2, worker-3"]
+    VMX -->|"ovftool"| OVA_SVC["服务 OVA x4\nnexus, harbor, gitlab, nas-omv"]
+    OVA_K8S --> SHA["SHA256SUMS.txt"]
+    OVA_SVC --> SHA
+```
+
+---
+
+### 6. 离线包导入流程
+
+```mermaid
+graph LR
+    subgraph BUNDLE["offline-bundle 目录"]
+        IMGS["images tar\n容器镜像"]
+        MFST["manifests yaml\nK8s 资源定义"]
+        APT_PKG["apt-bundle\ndeb 软件包"]
+        MODELS["models\nLLM 模型文件"]
+    end
+
+    IMGS -->|"ctr images import"| CTR["containerd\nk8s.io namespace"]
+    MFST -->|"kubectl apply -f"| KUBE_API["Kubernetes API"]
+    APT_PKG -->|"dpkg -i"| OS_PKG["OS 软件包\nNVIDIA driver"]
+    MODELS -->|"NFS PV"| LLM_POD["LLM Pod\n加载模型"]
+
+    CTR --> PODS["Pod 镜像服务"]
+    KUBE_API --> SVCS["Service, Ingress\n创建完成"]
+```
+
+---
+
+## VM 清单
+
+| VM | 角色 | 主要服务 | 端口 |
+| ---- | ------ | ---------- | ------ |
+| `cp` | Kubernetes Control Plane | kube-apiserver, etcd, scheduler | 6443, 2379-2380 |
+| `w1` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `w2` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `w3` | Kubernetes Worker + GPU | kubelet, containerd, NVIDIA runtime | 10250 |
+| `nexus-31` | Nexus Repository | apt mirror, pip mirror, helm chart | 8081 |
+| `harbor-32` | Harbor Registry | 容器镜像仓库 | 80, 443 |
+| `nas-omv` | NAS (OpenMediaVault) | NFS, SMB 共享存储 | 2049(NFS) |
+| `gitlab-33` | GitLab | 源代码管理, CI/CD | 80, 443, 22 |
+
+---
+
+## 核心目录
 
 ```text
 .
-├── apps/
-│   ├── airflow/          # Airflow 镜像 + DAG
-│   ├── backend/          # FastAPI + k8s 会话/快照控制
-│   ├── frontend/         # Quasar(Vue 3) 仪表盘
-│   └── jupyter/          # JupyterLab 镜像 + 工作区引导
-├── ansible/              # OVA 宾客配置，Docker/Kubernetes/引导
-├── infra/
-│   ├── harbor/           # Harbor 快照集成说明
-│   └── k8s/              # base manifests + dev/prod overlays + runner overlay
-├── packer/               # Ubuntu 24 OVA 模板
-└── scripts/              # 构建/发布/应用/离线辅助脚本
+├── packer/         # VM/OVA 镜像构建定义 (vmware-iso)
+├── scripts/        # VM 网络/安装/导入/验证自动化
+└── docs/           # 分阶段运维文档
 ```
 
-## 架构流程图
-
-```mermaid
-flowchart TD
-  A["WSL / 构建主机"] --> B["Packer"]
-  B --> C["Ubuntu 24 OVA"]
-  C --> D["Ansible 配置"]
-  D --> E["容器运行时 + Kubernetes 工具"]
-  E --> F["Kubernetes 单节点（控制平面）"]
-
-  F --> G["Frontend (NodePort 30080)"]
-  F --> H["Backend API (NodePort 30081)"]
-  F --> I["共享 Jupyter (NodePort 30088)"]
-  F --> J["GitLab (NodePort 30089)"]
-  F --> K["Airflow (NodePort 30090, 可选)"]
-  F --> T["Nexus (NodePort 30091)"]
-  F --> U["Harbor (NodePort 30092)"]
-  F --> V["code-server (NodePort 30100)"]
-  F --> W["Vite 开发服务器 (NodePort 31080)"]
-  F --> L["MongoDB + Redis + PVC"]
-
-  H --> M["会话管理器"]
-  M --> N["用户 Jupyter Pod"]
-  N --> O["PVC (users/session-id)"]
-  O --> P["Kaniko 快照 Job"]
-  P --> Q["Harbor 快照镜像"]
-  Q --> M
-
-  R["docker.io/edumgt 镜像"] --> F
-  S["离线包 (/opt/k8s-data-platform)"] --> F
-```
-
-## Jupyter 快照时序
-
-```mermaid
-sequenceDiagram
-  participant U as 用户
-  participant FE as Frontend
-  participant BE as Backend API
-  participant K8S as Kubernetes
-  participant PVC as 持久卷
-  participant HARBOR as Harbor 仓库
-
-  U->>FE: 启动实验室
-  FE->>BE: POST /sessions
-  BE->>BE: 解析 session-id / 镜像 / 工作区
-  BE->>K8S: 创建 Pod + NodePort Service
-  K8S->>PVC: 挂载 users/session-id
-  FE-->>U: 打开 JupyterLab
-
-  U->>FE: 发布快照
-  FE->>BE: POST /snapshots
-  BE->>K8S: 创建 Kaniko Job
-  K8S->>HARBOR: 推送镜像
-
-  U->>FE: 下次登录
-  FE->>BE: POST /sessions
-  BE->>HARBOR: 选择最新快照镜像
-  BE->>K8S: 使用快照镜像重建 Pod
-  FE-->>U: 恢复实验室环境
-```
+---
 
 ## 快速开始
 
-### 1. 准备 OVA 变量
-
 ```bash
-cp packer/variables.pkr.hcl.example packer/variables.pkr.hcl
+# Phase 1: 构建 OVA（在线环境）
+bash scripts/phase1_build_ova_assets.sh all
+
+# Phase 2: OVA 启动后的 air-gap 运维准备
+bash scripts/phase2_operate_airgap_cluster.sh all
+
+# Phase 3: 内网隔离环境安装
+bash scripts/phase3_install_from_completed_ova.sh full
+
+# 状态检查
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
 ```
-
-### 2. 构建 OVA
-
-```bash
-bash scripts/run_wsl.sh --skip-export
-```
-
-一步完成包含 OVA 导出：
-
-```bash
-bash scripts/run_wsl.sh
-```
-
-### 3. Docker Hub 镜像 + 本地 Kubernetes 运行时导入
-
-```bash
-bash scripts/build_k8s_images.sh --namespace edumgt --tag latest
-```
-
-推送到 Docker Hub：
-
-```bash
-docker login
-bash scripts/publish_dockerhub.sh --namespace edumgt --tag latest
-```
-
-### 4. 应用 Kubernetes
-
-```bash
-bash scripts/apply_k8s.sh --env dev
-```
-
-重置后重新应用：
-
-```bash
-bash scripts/reset_k8s.sh --env dev
-bash scripts/apply_k8s.sh --env dev
-```
-
-检查状态：
-
-```bash
-bash scripts/status_k8s.sh --env dev
-```
-
-### 5. GitLab Runner overlay
-
-```bash
-bash scripts/apply_k8s.sh --env dev --with-runner
-kubectl scale deployment/gitlab-runner -n data-platform-dev --replicas=1
-```
-
-### 6. Nexus 离线仓库
-
-```bash
-bash scripts/apply_k8s.sh --env dev
-bash scripts/setup_nexus_offline.sh --namespace data-platform-dev --nexus-url http://127.0.0.1:30091
-```
-
-## OVA 导入后测试
-
-VMware 专用流程：[docs/vmware/README.md](docs/vmware/README.md)
-
-### 推荐 VM 配置
-
-- CPU：4 核或以上
-- 内存：16 GB 或以上
-- 磁盘：100 GB 或以上
-- 网卡：推荐 `Bridged Adapter`
-
-### Web 访问
-
-- Frontend：`http://<OVA_IP>:30080`
-- Backend：`http://<OVA_IP>:30081`
-- Jupyter：`http://<OVA_IP>:30088`
-- GitLab：`http://<OVA_IP>:30089`
-- Nexus：`http://<OVA_IP>:30091`
-- Harbor：`http://<OVA_IP>:30092`
-- code-server：`http://<OVA_IP>:30100`
-- Frontend 开发：`http://<OVA_IP>:31080`
-
-## Frontend / API
-
-- 登录账号
-  - 普通用户：`test1@test.com / 123456`
-  - 普通用户：`test2@test.com / 123456`
-  - 管理员：`admin@test.com / 123456`
-- 普通用户只能启动/停止/恢复自己的 Jupyter sandbox
-- 管理员在管理模式下查看每个用户的 sandbox 状态、会话时长、累计使用时长、登录次数和启动次数
-- Backend API 端点：
-  - `POST /api/auth/login`
-  - `GET /api/auth/me`
-  - `POST /api/auth/logout`
-  - `POST /api/jupyter/sessions`
-  - `GET /api/jupyter/sessions/{username}`
-  - `DELETE /api/jupyter/sessions/{username}`
-  - `GET /api/jupyter/snapshots/{username}`
-  - `POST /api/jupyter/snapshots`
-  - `GET /api/admin/sandboxes`
-
-## Frontend 开发环境
-
-本 OVA 不仅提供生产 Frontend，还提供**隔离网络内的 Vue 开发环境**。
-
-- 生产 Frontend：Kubernetes NodePort `30080`
-- 开发 Frontend：Vite 开发服务器 `31080`
-- IDE：`code-server` `30100`
-- 包供应：Nexus npm registry + 离线 npm 缓存
-
-### 访问 code-server
-
-```text
-http://<OVA_IP>:30100
-```
-
-打开路径：
-
-```text
-/opt/k8s-data-platform/apps/frontend
-```
-
-### 安装依赖
-
-```bash
-bash /opt/k8s-data-platform/scripts/frontend_dev_setup.sh
-```
-
-### 启动开发服务器
-
-```bash
-bash /opt/k8s-data-platform/scripts/run_frontend_dev.sh
-```
-
-浏览器访问：`http://<OVA_IP>:31080`
-
-## 离线 / 隔离网络策略
-
-1. 使用 OVA 内预加载的镜像和工具启动基础集群
-2. 从 `offline-bundle` 导入所需镜像/包
-3. 通过 Nexus 提供 Python / npm 包缓存
-4. Harbor 仅用作每用户快照仓库
-5. 所有外部访问通过 `NodePort`
-
-```bash
-bash scripts/prepare_offline_bundle.sh --out-dir dist/offline-bundle
-bash scripts/import_offline_bundle.sh --bundle-dir dist/offline-bundle --apply --env dev
-```
-
-## 主要 NodePort
-
-| 服务 | NodePort |
-|---|---|
-| Frontend | 30080 |
-| Backend API | 30081 |
-| JupyterLab | 30088 |
-| GitLab Web | 30089 |
-| Airflow | 30090 |
-| Nexus | 30091 |
-| Harbor | 30092 |
-| code-server | 30100 |
-| Frontend Dev (Vite) | 31080 |
-| GitLab SSH | 30224 |
-
-## 镜像策略
-
-- `docker.io/edumgt/k8s-data-platform-backend:latest`
-- `docker.io/edumgt/k8s-data-platform-frontend:latest`
-- `docker.io/edumgt/k8s-data-platform-airflow:latest`
-- `docker.io/edumgt/k8s-data-platform-jupyter:latest`
-
-Harbor **仅**用作每用户 Jupyter 快照仓库，不作为通用镜像仓库。
-
-## VirtualBox 多节点扩展
-
-从现有控制平面 VM 自动创建/加入/分配 3 个 worker VM：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_virtualbox_multinode.ps1 `
-  -ControlPlaneVmName k8s-data-platform `
-  -WorkerNamePrefix k8s-worker `
-  -WorkerCount 3 `
-  -Username ubuntu `
-  -Password ubuntu `
-  -ForceRecreateWorkers
-```
-
-多节点 overlay 路径：`infra/k8s/overlays/dev-multinode`
-
-```bash
-bash scripts/apply_k8s.sh --env dev --overlay dev-multinode
-```
-
-## GitHub Actions
-
-- Workflow：`.github/workflows/publish-images.yml`
-- 所需 Secrets：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`
-
-## OVA 验证（2026-03-18）
-
-- VM 控制台截图：`docs/screenshots/ova-proof-vm-console.png`
-- 完整验证日志：[docs/ova-proof-20260318.md](docs/ova-proof-20260318.md)
-
-已知问题：`nexus` pod 镜像拉取失败，`docker.io/edumgt/platform-nexus3:3.90.1-alpine` 无法拉取。
 
 ---
 
-![Architecture Overview](docs/screenshots/architecture-overview.png)
+## 安装步骤（基于 OVA）
+
+### 1. 准备事项
+
+- OVA 文件 8 个（cp, w1~3, nexus, harbor, gitlab, nas-omv）
+- 离线包（`images/*.tar`, `manifests/`, `apt-bundle/`, `models/`）
+
+### 2. VM 基本设置（各节点）
+
+```bash
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+sudo bash scripts/set_hostname_hosts.sh --hostname <HOSTNAME> --entry "<IP> <HOSTNAME>"
+```
+
+### 3. 导入离线包
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --apply
+```
+
+### 4. 安装后检查
+
+```bash
+bash scripts/status_k8s.sh
+bash scripts/check_vm_airgap_status.sh
+kubectl get nodes -o wide
+kubectl get pods -A
+```
+
+### 5. 重新生成 OVA（如需要）
+
+```bash
+bash ovabuild.sh --vars-file packer/variables.vmware.auto.pkrvars.hcl --dist-dir C:/ffmpeg
+```
 
 ---
 
-## 💖 赞助 / Sponsor
+## 故障处理
 
-如果本项目对您有帮助，欢迎通过赞助支持持续开发。
+### Kubernetes 基本状态
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-pink?logo=github)](https://github.com/sponsors/edumgt)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/edumgt)
+```bash
+bash scripts/status_k8s.sh
+kubectl get nodes -o wide && kubectl get pods -A
+```
 
-赞助资金用于：
+### containerd / kubelet 异常
 
-- 云基础设施运营成本（CI/CD、镜像仓库、测试环境）
-- 新功能开发与维护
-- 文档改进和多语言支持
-- 教育内容和教程制作
+```bash
+sudo systemctl restart containerd kubelet
+sudo systemctl status containerd kubelet --no-pager
+```
 
-> 感谢您的支持！您的赞助让这个项目持续成长。
+### 离线镜像导入失败
+
+```bash
+bash scripts/import_offline_bundle.sh --bundle-dir /opt/k8s-data-platform/offline-bundle --runtime-only
+```
+
+### VM 网络问题
+
+```bash
+ip a && ip route && cat /etc/hosts
+sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
+```
+
+---
+
+## 文档地图
+
+| 文档 | 内容 |
+| ------ | ------ |
+| `docs/phase-1-build-ova.md` | OVA 构建（在线） |
+| `docs/phase-2-ova-solution-ops.md` | OVA 启动后运维准备 |
+| `docs/phase-3-install-airgap-from-ova.md` | 内网隔离环境安装 |
+| `CHECKLIST.md` | 构建/部署/演练检查清单 |
+| `PORTS.md` | 端口列表 |
+| `CHANGELOG.md` | 变更历史 |

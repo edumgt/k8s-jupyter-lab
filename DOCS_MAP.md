@@ -35,10 +35,10 @@
 | `CHECKLIST.md` | `start.sh` 반복 빌드/검증 체크리스트 | 변경 후 OVA 재생성 루틴 | VMware 3-node 기준 |
 | `TODO.md` | 반복 빌드 고도화 작업 백로그 | 다음 개선 과제 관리 | 우선순위별 TODO 템플릿 |
 | `CHANGELOG.md` | 문서/스크립트 변경 이력 | 변경 추적 시 | 최신 변경 요약 |
-| `TEST.md` | 테스트 스냅샷(한국어) | 과거 검증 근거 확인 | 2026-03-19 기준, VirtualBox 맥락 포함 |
-| `TEST.en.md` | 테스트 스냅샷(영문) | 과거 검증 근거 확인 | `TEST.md` 영어판 |
-| `TEST.ja.md` | 테스트 스냅샷(일본어) | 과거 검증 근거 확인 | `TEST.md` 일본어판 |
-| `TEST.zh.md` | 테스트 스냅샷(중국어) | 과거 검증 근거 확인 | `TEST.md` 중국어판 |
+| `docs/archive/TEST.md` | 테스트 스냅샷(한국어, 원문) | 과거 검증 근거 확인 | 2026-03-19 기준, VirtualBox 맥락 포함 |
+| `docs/archive/TEST.en.md` | 테스트 스냅샷 아카이브 안내(영문) | 과거 검증 근거 확인 | 전문 번역 대신 `TEST.md` 링크로 축소 |
+| `docs/archive/TEST.ja.md` | 테스트 스냅샷 아카이브 안내(일본어) | 과거 검증 근거 확인 | 전문 번역 대신 `TEST.md` 링크로 축소 |
+| `docs/archive/TEST.zh.md` | 테스트 스냅샷 아카이브 안내(중국어) | 과거 검증 근거 확인 | 전문 번역 대신 `TEST.md` 링크로 축소 |
 
 ## 3) 현재 기준 핵심 실행 문서
 
@@ -69,8 +69,8 @@
 - `docs/offline-repository.md`: 오프라인 저장소 운영 관점
 - `docs/ova-proof-20260318.md`: OVA 검증 기록
 
-## 5) 정리 제안 (향후)
+## 5) 정리 이력
 
-1. `TEST*.md`를 `docs/archive/`로 이동해 루트 집중도 개선
-2. 루트에는 `README/INSTALL/QUICKSTART/TROUBLESHOOTING/PORTS`만 유지
-3. 다국어 문서는 유지하되 테스트 스냅샷은 한국어 원문 + 링크 방식으로 축소
+1. ✅ `TEST*.md`를 `docs/archive/`로 이동해 루트 집중도 개선 (완료)
+2. ✅ 테스트 스냅샷 영/일/중 번역은 전문 번역 대신 한국어 원문(`docs/archive/TEST.md`) 링크로 축소 (완료)
+3. ✅ `README.en/ja/zh.md`를 병합 이후의 `README.md`(VMware 폐쇄망 플랫폼 기준) 내용에 맞게 재번역 (완료)

@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## 2026-07-03
+
+- 루트 `.md` 문서 정리 (`DOCS_MAP.md` 제안 반영)
+  - `TEST*.md` → `docs/archive/`로 이동
+  - 테스트 스냅샷 영/일/중 번역을 전문 번역 대신 한국어 원문 링크로 축소
+  - `README.en/ja/zh.md`를 vmware-k8s-jupyter 병합 이후의 `README.md` 내용에 맞게 재번역
+
 ## 2026-04-17
 
 - 저장소를 VM/OVA/air-gap 중심으로 재편
