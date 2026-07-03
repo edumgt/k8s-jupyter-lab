@@ -2,95 +2,54 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 MODE="full"
-EXTRA_INIT_ARGS=()
+BUNDLE_DIR="${BUNDLE_DIR:-/opt/k8s-data-platform/offline-bundle}"
+DRY_RUN=0
 
 usage() {
-  cat <<'EOF'
-Usage: bash scripts/phase3_install_from_completed_ova.sh [mode] [init.sh options...]
+  cat <<'USAGE'
+Usage: bash scripts/phase3_install_from_completed_ova.sh [mode] [options]
 
 Mode:
-  full        import + vm-commands + route + hosts + start (default)
-  continue    vm-commands + route + hosts + start (import skipped)
-  import-only import + vm-commands only
-  hosts-only  apply WSL/Windows hosts only
-  start-only  start only
+  full         import + base install + check (default)
+  import-only  import/apply offline bundle only
+  install-only apply base stack only
+  check-only   status checks only
 
-This script is a stage-3 wrapper for init.sh and forwards additional options
-to init.sh unchanged.
-
-Examples:
-  bash scripts/phase3_install_from_completed_ova.sh full --ova-dir C:/ffmpeg
-  bash scripts/phase3_install_from_completed_ova.sh continue --control-plane-ip 192.168.56.10
-  bash scripts/phase3_install_from_completed_ova.sh start-only -- --skip-export --skip-nexus-prime
-EOF
+Options:
+  --bundle-dir PATH  Offline bundle path
+  --dry-run          Print commands only
+  -h, --help         Show help
+USAGE
 }
 
-die() {
-  printf '%s\n' "$*" >&2
-  exit 1
-}
+die(){ printf '%s\n' "$*" >&2; exit 1; }
+run_cmd(){ if [[ "${DRY_RUN}" == "1" ]]; then printf '+'; printf ' %q' "$@"; printf '\n'; else "$@"; fi; }
 
 if [[ $# -gt 0 ]]; then
   case "$1" in
-    full|continue|import-only|hosts-only|start-only)
-      MODE="$1"
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    full|import-only|install-only|check-only) MODE="$1"; shift ;;
+    -h|--help) usage; exit 0 ;;
   esac
 fi
 
-if [[ $# -gt 0 ]]; then
-  EXTRA_INIT_ARGS=("$@")
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --bundle-dir) BUNDLE_DIR="$2"; shift 2 ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "Unknown option: $1" ;;
+  esac
+done
 
-stage_args=()
+run_import(){ run_cmd bash "${ROOT_DIR}/scripts/import_offline_bundle.sh" --bundle-dir "${BUNDLE_DIR}" --apply; }
+run_install(){ run_cmd bash "${ROOT_DIR}/scripts/setup_k8s_modern_stack.sh"; }
+run_check(){ run_cmd bash "${ROOT_DIR}/scripts/status_k8s.sh"; run_cmd bash "${ROOT_DIR}/scripts/check_vm_airgap_status.sh"; }
+
 case "${MODE}" in
-  full)
-    stage_args=(
-      --import-ova
-      --vm-commands
-      --apply-wsl-route
-      --apply-wsl-hosts
-      --apply-windows-hosts
-      --run-start
-    )
-    ;;
-  continue)
-    stage_args=(
-      --vm-commands
-      --apply-wsl-route
-      --apply-wsl-hosts
-      --apply-windows-hosts
-      --run-start
-    )
-    ;;
-  import-only)
-    stage_args=(
-      --import-ova
-      --vm-commands
-    )
-    ;;
-  hosts-only)
-    stage_args=(
-      --apply-wsl-hosts
-      --apply-windows-hosts
-    )
-    ;;
-  start-only)
-    stage_args=(
-      --run-start
-    )
-    ;;
-  *)
-    die "Unsupported mode: ${MODE}"
-    ;;
+  full) run_import; run_install; run_check ;;
+  import-only) run_import ;;
+  install-only) run_install ;;
+  check-only) run_check ;;
+  *) die "Unsupported mode: ${MODE}" ;;
 esac
-
-exec bash "${ROOT_DIR}/init.sh" "${stage_args[@]}" "${EXTRA_INIT_ARGS[@]}"
-

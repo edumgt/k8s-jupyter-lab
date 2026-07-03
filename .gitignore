@@ -3,6 +3,11 @@ dist/
 packer/output-*/
 apps/frontend/node_modules/
 apps/frontend/dist/
+apps/dataxflow-frontend/node_modules/
+apps/dataxflow-frontend/dist/
+apps/jupyter-frontend/node_modules/
+apps/jupyter-frontend/dist/
+apps/adw-server-node/node_modules/
 apps/backend/.venv/
 apps/jupyter/.venv/
 __pycache__/
@@ -15,3 +20,12 @@ infra/k8s/runner/secret.local.yaml
 packer/packer_cache/
 *.ova
 tmp/pwcap/node_modules/
+*.docx
+# Prevent real .env files from being committed; use *.env.example for templates
+.env
+**/.env
+*.env
+!*.env.example
+
+.codex
+tools/vscode-local-agent/node_modules/

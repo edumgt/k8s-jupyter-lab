@@ -188,26 +188,6 @@ check_external_registry_refs() {
   fi
 }
 
-run_offline_readiness_script() {
-  local check_script=""
-
-  if [[ -x "${SCRIPT_DIR}/check_offline_readiness.sh" ]]; then
-    check_script="${SCRIPT_DIR}/check_offline_readiness.sh"
-  elif [[ -x "/opt/k8s-data-platform/scripts/check_offline_readiness.sh" ]]; then
-    check_script="/opt/k8s-data-platform/scripts/check_offline_readiness.sh"
-  fi
-
-  if [[ -z "${check_script}" ]]; then
-    log "check_offline_readiness.sh not found; skipping detailed offline readiness check."
-    return 0
-  fi
-
-  log "Running ${check_script}"
-  if ! bash "${check_script}"; then
-    warn "Offline readiness check reported warnings/failures."
-  fi
-}
-
 main() {
   prepare_log
 
@@ -227,7 +207,6 @@ main() {
   check_node_and_pod_snapshot
   check_pull_errors
   check_external_registry_refs
-  run_offline_readiness_script
 
   if [[ "${EXIT_CODE}" -eq 0 ]]; then
     log "VM air-gap check completed: PASS"

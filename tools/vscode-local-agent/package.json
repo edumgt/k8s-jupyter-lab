@@ -1,0 +1,73 @@
+{
+  "name": "k8s-jupyter-local-agent",
+  "displayName": "Local Ollama Agent",
+  "description": "A VS Code sidebar agent that talks to a local Ollama instance from WSL.",
+  "version": "0.0.2",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:localAgent.chatView"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "localAgent.clearChat",
+        "title": "Local Agent: Clear Chat"
+      },
+      {
+        "command": "localAgent.openSettings",
+        "title": "Local Agent: Open Settings"
+      }
+    ],
+    "configuration": {
+      "title": "Local Ollama Agent",
+      "properties": {
+        "localAgent.ollamaBaseUrl": {
+          "type": "string",
+          "default": "http://172.29.32.1:11434",
+          "description": "Base URL for the Ollama server reachable from WSL."
+        },
+        "localAgent.model": {
+          "type": "string",
+          "default": "qwen3.5",
+          "description": "Default Ollama model used by the sidebar agent."
+        },
+        "localAgent.systemPrompt": {
+          "type": "string",
+          "default": "You are a practical local coding assistant working inside VS Code. Be concise, useful, and code-oriented.",
+          "description": "Optional system prompt prepended to each Ollama chat request."
+        },
+        "localAgent.includeWorkspaceContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Attach a compact workspace snapshot including files and git status to each request."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "localAgentChat",
+          "title": "Local Agent",
+          "icon": "media/agent.svg"
+        }
+      ]
+    },
+    "views": {
+      "localAgentChat": [
+        {
+          "type": "webview",
+          "id": "localAgent.chatView",
+          "name": "Chat"
+        }
+      ]
+    }
+  }
+}

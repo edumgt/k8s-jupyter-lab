@@ -17,7 +17,7 @@ Fixes common kubelet/network timeout issues:
   - pod-to-pod/network forwarding drops caused by UFW forward policy
 
 Options:
-  --dns-servers CSV            Preferred DNS servers (e.g. 192.168.56.1,1.1.1.1,8.8.8.8).
+  --dns-servers CSV            Preferred DNS servers (e.g. <YOUR_GATEWAY_IP>,1.1.1.1,8.8.8.8).
   --fallback-dns CSV           Fallback DNS list (default: 1.1.1.1,8.8.8.8).
   --kubelet-port PORT          kubelet secure API port (default: 10250).
   --kube-proxy-port PORT       kube-proxy health port (default: 10256).
