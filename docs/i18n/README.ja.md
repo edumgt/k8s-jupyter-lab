@@ -1,6 +1,6 @@
 # k8s-jupyter — エアギャップ AI エージェントプラットフォーム（VMware OVA）
 
-🌐 [English](README.en.md) | [中文](README.zh.md) | **日本語** | [한국어](../../README.md)
+🌐 [English](../../README.md) | [中文](README.zh.md) | **日本語** | [한국어](../../readme-kr.md)
 
 顧客の**閉域網（air-gap）**環境に VMware OVA として VM を移送し、
 **GPU ベースのローカル LLM + AI エージェント開発・運用プラットフォーム**を構築する自動化リポジトリです。

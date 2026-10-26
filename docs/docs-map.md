@@ -4,7 +4,7 @@
 
 이 문서는 저장소의 `.md` 문서가 많아졌을 때, 어떤 문서를 먼저 보고 어떤 상황에서 참고해야 하는지 빠르게 판단하기 위한 인덱스입니다.
 
-루트에는 `README.md`, `INSTALL.md`, `QUICKSTART.md`, `TROUBLESHOOTING.md`, `PORTS.md`, `CHANGELOG.md`만 유지하고, 나머지 보조 문서는 `docs/` 하위로 정리했습니다.
+루트에는 `README.md`(영문), `readme-kr.md`(한글), `INSTALL.md`, `QUICKSTART.md`, `TROUBLESHOOTING.md`, `PORTS.md`, `CHANGELOG.md`를 유지하고, 나머지 보조 문서는 `docs/` 하위로 정리했습니다.
 
 ## 1) 권장 읽기 순서 (VMware 멀티노드 기준)
 
@@ -26,8 +26,9 @@
 
 | 파일 | 목적 | 언제 보는지 | 비고 |
 |---|---|---|---|
-| `README.md` | 저장소 전체 설명 + VMware/폐쇄망/운영 흐름 | 처음 시작할 때 | 한국어 메인 엔트리 (루트) |
-| `docs/i18n/README.en.md` | 영문 메인 설명 | 다국어 공유 시 | `README.md`의 영어판 |
+| `README.md` | 저장소 전체 설명 + VMware/폐쇄망/운영 흐름 | 처음 시작할 때 | 영문 메인 엔트리 (루트) |
+| `readme-kr.md` | 저장소 전체 설명 한글본 | 한글 문서가 필요할 때 | 기존 한국어 README 보존 |
+| `docs/i18n/README.en.md` | 영문 메인 설명 사본 | 기존 i18n 링크 | 정식본은 루트 `README.md` |
 | `docs/i18n/README.ja.md` | 일본어 메인 설명 | 다국어 공유 시 | `README.md`의 일본어판 |
 | `docs/i18n/README.zh.md` | 중국어 메인 설명 | 다국어 공유 시 | `README.md`의 중국어판 |
 | `QUICKSTART.md` | 최소 명령으로 빠른 기동/확인 | 로컬 빠른 점검 | 짧은 실행 흐름 (루트) |
@@ -78,3 +79,4 @@
 2. ✅ 테스트 스냅샷 영/일/중 번역은 전문 번역 대신 한국어 원문(`docs/archive/TEST.md`) 링크로 축소 (완료)
 3. ✅ `README.en/ja/zh.md`를 병합 이후의 `README.md`(VMware 폐쇄망 플랫폼 기준) 내용에 맞게 재번역 (완료)
 4. ✅ `CHECK.md`, `CHECKLIST.md`, `TODO.md`, `DOCS_MAP.md`를 `docs/`로, `README.en/ja/zh.md`를 `docs/i18n/`으로 이동해 루트를 `README.md`/`INSTALL.md`/`QUICKSTART.md`/`TROUBLESHOOTING.md`/`PORTS.md`/`CHANGELOG.md` 6개로 축소 (완료, 파일명은 `docs-map.md`로 변경)
+5. ✅ 루트 `README.md`를 영문 메인으로 전환하고, 한글 원문은 `readme-kr.md`로 보존 (완료)

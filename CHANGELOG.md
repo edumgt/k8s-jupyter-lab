@@ -1,5 +1,10 @@
 # CHANGELOG.md
 
+## 2026-10-26
+
+- 루트 `README.md`를 영문으로 전환하고, 한글 원문은 `readme-kr.md`로 보존
+- `docs/i18n/README.{en,ja,zh}.md` 언어 링크를 루트 영문/한글 README에 맞게 수정
+
 ## 2026-07-03
 
 - 루트 `.md` 문서 정리 (`DOCS_MAP.md` 제안 반영)
