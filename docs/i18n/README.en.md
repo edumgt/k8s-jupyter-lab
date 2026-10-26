@@ -1,6 +1,8 @@
 # k8s-jupyter — Air-gap AI Agent Platform (VMware OVA)
 
-🌐 **English** | [中文](README.zh.md) | [日本語](README.ja.md) | [한국어](../../README.md)
+🌐 [English](../../README.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [한국어](../../readme-kr.md)
+
+> Canonical English README: [../../README.md](../../README.md). This copy is kept for existing i18n links.
 
 An automation repository for building a **GPU-based Local LLM + AI Agent development/operations platform** by porting VMs as VMware OVAs into a customer's **air-gapped** environment.
 
