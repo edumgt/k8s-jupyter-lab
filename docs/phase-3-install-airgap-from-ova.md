@@ -2,6 +2,16 @@
 
 목표: 완성된 OVA와 오프라인 번들로 폐쇄망 환경에 설치합니다.
 
+## 로컬 리허설
+
+OVA 반입 전에 같은 포트의 로컬 데모가 필요하면:
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+Harbor/GitLab/Nexus/Airflow는 mock입니다. 폐쇄망 설치는 아래 `full` 경로를 사용합니다.
+
 ## 실행
 
 ```bash

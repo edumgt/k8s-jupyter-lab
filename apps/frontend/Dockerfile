@@ -12,6 +12,11 @@ RUN npm install -g npm@latest --quiet && rm -f package-lock.json && npm install 
 
 COPY . .
 
+ARG VITE_API_BASE_URL=
+RUN if [ -n "${VITE_API_BASE_URL}" ]; then \
+      printf 'VITE_API_BASE_URL=%s\n' "${VITE_API_BASE_URL}" > .env.production.local; \
+    fi
+
 RUN npm run build
 
 FROM nginx:1.27-alpine

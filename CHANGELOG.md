@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## 2026-11-10
+
+- OVA 없이 로컬에서 재현하는 air-gap mock 추가
+  - `docker-compose.airgap-mock.yml`
+  - 원라이너 `bash scripts/quickstart_airgap_mock.sh`
+  - Harbor/GitLab/Nexus/Airflow는 mock이며, 폐쇄망 OVA 설치를 대체하지 않음
+
 ## 2026-10-26
 
 - 루트 `README.md`를 영문으로 전환하고, 한글 원문은 `readme-kr.md`로 보존

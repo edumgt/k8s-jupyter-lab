@@ -269,14 +269,26 @@ graph LR
 
 ```text
 .
-├── packer/         # VM/OVA 이미지 빌드 정의 (vmware-iso)
-├── scripts/        # VM 네트워크·설치·반입·검증 자동화
-└── docs/           # 단계별 운영 문서
+├── docker-compose.airgap-mock.yml  # 로컬 air-gap mock (OVA 불필요)
+├── deploy/airgap-mock/             # Harbor/GitLab/Nexus/Airflow mock 페이지
+├── packer/                         # VM/OVA 이미지 빌드 정의 (vmware-iso)
+├── scripts/                        # VM 네트워크·설치·반입·검증 자동화
+└── docs/                           # 단계별 운영 문서
 ```
 
 ---
 
 ## 빠른 시작
+
+VMware나 OVA 없이 로컬에서 바로 재현하려면 저장소 루트에서 한 줄만 실행합니다.
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+이 명령은 `docker-compose.airgap-mock.yml`로 frontend `:30080`, backend `:30081`, Jupyter `:30088`(token `platform123`), Harbor/GitLab/Nexus/Airflow mock을 띄웁니다. 데모 로그인: `admin@test.com` / `123456`. 폐쇄망 OVA 설치가 아니라 로컬 데모입니다. 첫 실행은 이미지 pull/빌드용 네트워크가 필요합니다. 종료: `bash scripts/quickstart_airgap_mock.sh down`.
+
+OVA 납품 경로:
 
 ```bash
 # Phase 1: OVA 빌드 (온라인 환경)
@@ -372,5 +384,7 @@ sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
 | `docs/phase-3-install-airgap-from-ova.md` | 폐쇄망 설치 |
 | `docs/checklist.md` | 빌드·배포·리허설 체크리스트 |
 | `PORTS.md` | 포트 목록 |
+| `QUICKSTART.md` | 로컬 원라이너와 클러스터 기동 |
+| `docker-compose.airgap-mock.yml` | OVA 없는 로컬 air-gap mock |
 | `CHANGELOG.md` | 변경 이력 |
 | `docs/docs-map.md` | 전체 문서 인덱스 |
