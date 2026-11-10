@@ -270,14 +270,26 @@ graph LR
 
 ```text
 .
-├── packer/         # VM/OVA image build definitions (vmware-iso)
-├── scripts/        # VM networking, install, import, verification automation
-└── docs/           # Phase-by-phase operations documentation
+├── docker-compose.airgap-mock.yml  # local air-gap mock (no OVA)
+├── deploy/airgap-mock/             # mock Harbor/GitLab/Nexus/Airflow pages
+├── packer/                         # VM/OVA image build definitions (vmware-iso)
+├── scripts/                        # VM networking, install, import, verification automation
+└── docs/                           # Phase-by-phase operations documentation
 ```
 
 ---
 
 ## Quick Start
+
+Local rehearsal does not need VMware or the OVA set. From the repository root:
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+That one-liner starts `docker-compose.airgap-mock.yml`: frontend `:30080`, backend `:30081`, Jupyter `:30088` (token `platform123`), plus Harbor/GitLab/Nexus/Airflow mocks. Demo login: `admin@test.com` / `123456`. This is a local demo, not the air-gapped install. The first run needs network to pull and build images. Stop it with `bash scripts/quickstart_airgap_mock.sh down`.
+
+OVA delivery:
 
 ```bash
 # Phase 1: Build OVA (online environment)
@@ -373,4 +385,6 @@ sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
 | `docs/phase-3-install-airgap-from-ova.md` | Air-gapped installation |
 | `CHECKLIST.md` | Build/deploy/rehearsal checklist |
 | `PORTS.md` | Port list |
+| `QUICKSTART.md` | Local one-liner and cluster start |
+| `docker-compose.airgap-mock.yml` | Local air-gap mock, no OVA |
 | `CHANGELOG.md` | Change history |

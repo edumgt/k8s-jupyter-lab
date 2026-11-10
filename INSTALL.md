@@ -1,5 +1,7 @@
 # INSTALL.md
 
+로컬에서 OVA 없이 같은 포트를 재현하려면 `bash scripts/quickstart_airgap_mock.sh` 를 사용합니다. 아래는 폐쇄망 OVA 설치 절차입니다.
+
 ## Air-gap 빠른 설치 (3 OVA + init.sh 1개)
 
 이 문서는 아래 시나리오만 대상으로 합니다.

@@ -269,14 +269,26 @@ graph LR
 
 ```text
 .
-├── packer/         # VM/OVA イメージビルド定義 (vmware-iso)
-├── scripts/        # VM ネットワーク・インストール・持ち込み・検証の自動化
-└── docs/           # フェーズ別運用ドキュメント
+├── docker-compose.airgap-mock.yml  # ローカル air-gap モック（OVA 不要）
+├── deploy/airgap-mock/             # Harbor/GitLab/Nexus/Airflow モックページ
+├── packer/                         # VM/OVA イメージビルド定義 (vmware-iso)
+├── scripts/                        # VM ネットワーク・インストール・持ち込み・検証の自動化
+└── docs/                           # フェーズ別運用ドキュメント
 ```
 
 ---
 
 ## クイックスタート
+
+VMware も OVA も使わず、リポジトリルートで次の 1 行を実行します。
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+`docker-compose.airgap-mock.yml` で frontend `:30080`、backend `:30081`、Jupyter `:30088`（token `platform123`）、Harbor/GitLab/Nexus/Airflow のモックを起動します。デモログイン: `admin@test.com` / `123456`。閉域網への OVA インストールではなく、ローカルデモです。初回はイメージの pull/build にネットワークが必要です。停止: `bash scripts/quickstart_airgap_mock.sh down`。
+
+OVA 納品手順:
 
 ```bash
 # Phase 1: OVA ビルド（オンライン環境）
@@ -372,4 +384,6 @@ sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
 | `docs/phase-3-install-airgap-from-ova.md` | 閉域網インストール |
 | `CHECKLIST.md` | ビルド・デプロイ・リハーサルチェックリスト |
 | `PORTS.md` | ポート一覧 |
+| `QUICKSTART.md` | ローカルワンライナーとクラスタ起動 |
+| `docker-compose.airgap-mock.yml` | OVA 不要のローカル air-gap モック |
 | `CHANGELOG.md` | 変更履歴 |

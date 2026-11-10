@@ -17,6 +17,16 @@
 - 기본 운영 프로파일: `dev-3node` (control-plane 1 + worker 2)
 - 기본 접근 방식: `Ingress(hosts 기반) + 내부 Harbor 이미지 + 오프라인 번들`
 
+## 로컬 리허설 (납품 전, OVA 불필요)
+
+고객사 설치 절차가 아닙니다. 같은 포트를 로컬에서 재현할 때:
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+Harbor/GitLab/Nexus/Airflow는 mock입니다.
+
 ## 운영 전 공통 권장사항
 
 1. 기본 계정 비밀번호를 반드시 변경합니다.

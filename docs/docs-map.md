@@ -31,7 +31,8 @@
 | `docs/i18n/README.en.md` | 영문 메인 설명 사본 | 기존 i18n 링크 | 정식본은 루트 `README.md` |
 | `docs/i18n/README.ja.md` | 일본어 메인 설명 | 다국어 공유 시 | `README.md`의 일본어판 |
 | `docs/i18n/README.zh.md` | 중국어 메인 설명 | 다국어 공유 시 | `README.md`의 중국어판 |
-| `QUICKSTART.md` | 최소 명령으로 빠른 기동/확인 | 로컬 빠른 점검 | 짧은 실행 흐름 (루트) |
+| `QUICKSTART.md` | 로컬 원라이너와 클러스터 기동 | OVA 없이 재현하거나 클러스터를 점검할 때 | `scripts/quickstart_airgap_mock.sh` |
+| `docker-compose.airgap-mock.yml` | 로컬 air-gap mock | VMware/OVA 없이 같은 포트를 띄울 때 | Harbor/GitLab/Nexus/Airflow는 mock |
 | `INSTALL.md` | 설치/초기 구성 절차 | 신규 VM/OVA 세팅 | 운영자 설치 기준 (루트) |
 | `PORTS.md` | 포트 맵 | 방화벽/접속 문제 확인 | NodePort/내부포트 정리 (루트) |
 | `TROUBLESHOOTING.md` | 장애 대응 절차 | Pod/CNI/접속 장애 시 | 빠른 점검 명령 모음 (루트) |
@@ -49,6 +50,7 @@
 - VMware 멀티노드 자동 구성: `README.md` + `docs/vmware/README.md`
 - 스크립트 역할 분리: `start.sh`(구성/검증), `ovabuild.sh`(OVA export)
 - 단일 서비스 빠른 확인: `QUICKSTART.md`
+- OVA 없는 로컬 원라이너: `bash scripts/quickstart_airgap_mock.sh`
 - 설치/운영 표준화: `INSTALL.md`, `docs/check.md`, `docs/checklist.md`, `docs/todo.md`, `TROUBLESHOOTING.md`
 
 ## 3-1) 3단계 표준 분류 (요청 반영)

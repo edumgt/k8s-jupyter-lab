@@ -24,6 +24,8 @@ shell_sanity:
     - bash -n scripts/healthcheck.sh
     - bash -n scripts/verify.sh
     - bash -n scripts/export_gitlab_repos.sh
+    - bash -n scripts/quickstart_airgap_mock.sh
+    - bash tests/test_quickstart_airgap_mock.sh
 
 kustomize_validate:
   stage: validate

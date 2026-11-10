@@ -269,14 +269,26 @@ graph LR
 
 ```text
 .
-├── packer/         # VM/OVA 镜像构建定义 (vmware-iso)
-├── scripts/        # VM 网络/安装/导入/验证自动化
-└── docs/           # 分阶段运维文档
+├── docker-compose.airgap-mock.yml  # 本地 air-gap 模拟（无需 OVA）
+├── deploy/airgap-mock/             # Harbor/GitLab/Nexus/Airflow 模拟页
+├── packer/                         # VM/OVA 镜像构建定义 (vmware-iso)
+├── scripts/                        # VM 网络/安装/导入/验证自动化
+└── docs/                           # 分阶段运维文档
 ```
 
 ---
 
 ## 快速开始
+
+不需要 VMware 或 OVA。在仓库根目录执行一行命令即可在本地复现：
+
+```bash
+bash scripts/quickstart_airgap_mock.sh
+```
+
+该命令通过 `docker-compose.airgap-mock.yml` 启动 frontend `:30080`、backend `:30081`、Jupyter `:30088`（token `platform123`），以及 Harbor/GitLab/Nexus/Airflow 模拟服务。演示登录：`admin@test.com` / `123456`。这是本地演示，不是隔离网 OVA 安装。首次运行需要网络来拉取并构建镜像。停止：`bash scripts/quickstart_airgap_mock.sh down`。
+
+OVA 交付路径：
 
 ```bash
 # Phase 1: 构建 OVA（在线环境）
@@ -372,4 +384,6 @@ sudo bash scripts/set_static_ip.sh --ip <IP> --prefix 24 --gateway <GW>
 | `docs/phase-3-install-airgap-from-ova.md` | 内网隔离环境安装 |
 | `CHECKLIST.md` | 构建/部署/演练检查清单 |
 | `PORTS.md` | 端口列表 |
+| `QUICKSTART.md` | 本地一行命令与集群启动 |
+| `docker-compose.airgap-mock.yml` | 无需 OVA 的本地 air-gap 模拟 |
 | `CHANGELOG.md` | 变更历史 |
